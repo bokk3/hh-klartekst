@@ -61,6 +61,9 @@ object KlartextParser {
                     if (nextClean.startsWith("Q") && nextClean.contains("=")) {
                         combinedLines.append(" ").append(nextClean)
                         j++
+                    } else if (rawLines[j - 1].contains("~") || nextRaw.startsWith("~")) {
+                        combinedLines.append(" ").append(nextClean.removePrefix("~").trim())
+                        j++
                     } else {
                         break
                     }
@@ -510,12 +513,17 @@ object KlartextParser {
         }
 
         val qMap = mutableMapOf<Int, Float>()
-        val qMatcher = qParamPairRegex.matcher(upper)
+        val rawQMap = mutableMapOf<Int, String>()
+        val qMatcher = Pattern.compile("Q(\\d+)\\s*=\\s*([+-]?[A-Z0-9_.]+)", Pattern.CASE_INSENSITIVE).matcher(upper)
         while (qMatcher.find()) {
             val qIdx = qMatcher.group(1)?.toIntOrNull()
-            val qVal = qMatcher.group(2)?.toFloatOrNull()
-            if (qIdx != null && qVal != null) {
-                qMap[qIdx] = qVal
+            val rawVal = qMatcher.group(2)?.trim() ?: ""
+            if (qIdx != null) {
+                rawQMap[qIdx] = rawVal
+                val numVal = rawVal.toFloatOrNull()
+                if (numVal != null) {
+                    qMap[qIdx] = numVal
+                }
             }
         }
 
@@ -530,6 +538,54 @@ object KlartextParser {
             parseCoord(coordZRegex, upper)?.let { dz = it.first; isInc = isInc || it.second }
         }
 
+        // SL sub-contour labels CYCL DEF 14.1 KONTURLABEL 1 / 2 ...
+        val slLabels = mutableListOf<String>()
+        if (mainNum == 14 && subNum == 1) {
+            val after141 = afterDef.substringAfter("14.1").trim()
+            val labelText = after141
+                .removePrefix("KONTURLABEL")
+                .removePrefix("CONTOURSTATUS")
+                .trim()
+            val tokens = labelText.split("[/\\s]+".toRegex()).filter { it.isNotBlank() }
+            for (tok in tokens) {
+                val clean = tok.removeSurrounding("\"").trim()
+                if (clean.isNotEmpty() && clean != "/" && clean != ";") {
+                    slLabels.add(clean)
+                }
+            }
+        }
+
+        // Rotation angle CYCL DEF 10.1 ROT+...
+        var rotAngle: Float? = null
+        var rawRot: String? = null
+        if (mainNum == 10 && subNum == 1) {
+            val rotMatcher = Pattern.compile("ROT\\s*([+-]?[A-Z0-9_.]*)", Pattern.CASE_INSENSITIVE).matcher(upper)
+            if (rotMatcher.find()) {
+                val token = rotMatcher.group(1)?.trim() ?: ""
+                rawRot = token
+                rotAngle = token.toFloatOrNull() ?: 0f
+            } else {
+                rotAngle = 0f
+            }
+        }
+
+        // Mirror axes CYCL DEF 8.1 X / Y
+        val mirrorAxes = mutableSetOf<String>()
+        var isClearMirror = false
+        if (mainNum == 8 && subNum == 1) {
+            val after81 = upper.substringAfter("8.1").trim()
+            val tokens = after81.split("\\s+".toRegex()).filter { it.isNotBlank() }
+            var foundAxis = false
+            for (tok in tokens) {
+                if (tok == "X" || tok.startsWith("X")) { mirrorAxes.add("X"); foundAxis = true }
+                if (tok == "Y" || tok.startsWith("Y")) { mirrorAxes.add("Y"); foundAxis = true }
+                if (tok == "Z" || tok.startsWith("Z")) { mirrorAxes.add("Z"); foundAxis = true }
+            }
+            if (!foundAxis || tokens.isEmpty()) {
+                isClearMirror = true
+            }
+        }
+
         return KlartextBlock.CycleDef(
             lineNumber = lineNum,
             rawText = rawLine,
@@ -537,10 +593,16 @@ object KlartextParser {
             subNumber = subNum,
             cycleName = afterDef.lineSequence().firstOrNull() ?: afterDef,
             qParams = qMap,
+            rawQParams = rawQMap,
             datumX = dx,
             datumY = dy,
             datumZ = dz,
-            isIncDatum = isInc
+            isIncDatum = isInc,
+            labels = slLabels,
+            rotationAngle = rotAngle,
+            rawRotationAngle = rawRot,
+            mirrorAxes = mirrorAxes,
+            isClearMirror = isClearMirror
         )
     }
 

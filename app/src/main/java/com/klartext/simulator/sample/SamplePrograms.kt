@@ -391,9 +391,140 @@ object SamplePrograms {
         34 END PGM PARAMETRISCH_ELLIPS_Q MM
     """.trimIndent()
 
+    val slCycliEilanden = """
+        0 BEGIN PGM SL_CYCLI_EILANDEN MM
+        1 ; ===================================================
+        2 ; PIJLER 1 DEMO: SL-CYCLI MET EILAND (CYCL 14, 20, 22, 24)
+        3 ; VAKSTUDIE: DIEPE RECHTHOEKIGE KAMER MET CENTRAAL EILAND
+        4 ; ===================================================
+        5 BLK FORM 0.1 Z X-50 Y-50 Z-25
+        6 BLK FORM 0.2 X+50 Y+50 Z+0
+        7 TOOL CALL "FREES10" Z S3200 F600
+        8 ; --- SL-CONTOUR LIJST DEFINITIE (1 = KAMER, 2 = EILAND) ---
+        9 CYCL DEF 14.0 KONTUR
+        10 CYCL DEF 14.1 KONTURLABEL 1 / 2
+        11 ; --- CYCLUS 20: ALGEMENE CONTOURGEGEVENS ---
+        12 CYCL DEF 20 KONTUR-DATEN ~
+             Q1=-12 ;FRAES-TIEFE ~
+             Q2=+1 ;BAAN-OVERLAPPING ~
+             Q3=+0.4 ;OVERMAAT ZIJKANT ~
+             Q4=+0.1 ;OVERMAAT DIEPTE ~
+             Q5=+0 ;COOR. OPPERVLAK ~
+             Q6=+2 ;VEILIGHEIDSAFST. ~
+             Q7=+50 ;VEILIGE HOOGTE ~
+             Q8=+0 ;AFRONDINGSRADIUS ~
+             Q9=+1 ;DRAAIRICHTING
+        13 ; --- CYCLUS 22: RUWFREZEN MET VERMIJDING VAN HET EILAND ---
+        14 CYCL DEF 22 AUSRAEUMEN ~
+             Q10=+6 ;INSTEEKDIEPTE ~
+             Q11=+180 ;VOEDING DIEPTEVERPL. ~
+             Q12=+550 ;VOEDING VOORBEWERKEN ~
+             Q18=+0 ;VOORRUW-WERKTUIG ~
+             Q19=+100 ;VOEDING PENDELEN ~
+             Q208=+99999 ;VOEDING TERUGTREKKEN
+        15 CYCL CALL
+        16 ; --- CYCLUS 24: NAFREZEN ZIJKANTEN (KAMERWAND & EILANDWAND) ---
+        17 CYCL DEF 24 SCHLICHTEN SEITE ~
+             Q9=+1 ;DRAAIRICHTING ~
+             Q10=+6 ;INSTEEKDIEPTE ~
+             Q11=+180 ;VOEDING DIEPTEVERPL. ~
+             Q12=+450 ;VOEDING VOORBEWERKEN ~
+             Q14=+0 ;OVERMAAT ZIJKANT
+        18 CYCL CALL
+        19 L Z+50 R0 FMAX M30
+        20 ; ===================================================
+        21 ; SUB-CONTOUR 1: BUITENKAMER 80x80 MM
+        22 ; ===================================================
+        23 LBL 1
+        24 L X-40 Y-40 RR
+        25 L X+40 Y-40
+        26 L X+40 Y+40
+        27 L X-40 Y+40
+        28 L X-40 Y-40
+        29 LBL 0
+        30 ; ===================================================
+        31 ; SUB-CONTOUR 2: CENTRAAL EILAND 30x30 MM
+        32 ; ===================================================
+        33 LBL 2
+        34 L X-15 Y-15 RL
+        35 L X+15 Y-15
+        36 L X+15 Y+15
+        37 L X-15 Y+15
+        38 L X-15 Y-15
+        39 LBL 0
+        40 END PGM SL_CYCLI_EILANDEN MM
+    """.trimIndent()
+
+    val steekcirkelVlakfrees = """
+        0 BEGIN PGM STEEKCIRKEL_VLAKFREES MM
+        1 ; ===================================================
+        2 ; PIJLER 1 DEMO: VLAKFREZEN (232), STEEKCIRKEL (220),
+        3 ; BOREN (200), ROTATIE (10) & SPIEGELING (8)
+        4 ; ===================================================
+        5 BLK FORM 0.1 Z X-60 Y-60 Z-25
+        6 BLK FORM 0.2 X+60 Y+60 Z+0
+        7 ; --- 1. VLAKFREZEN VAN DE BOVENKANT MET VLAKFREES63 ---
+        8 TOOL CALL "VLAKFREES63" Z S2200 F900
+        9 CYCL DEF 232 PLANFRAESEN ~
+             Q389=+0 ;STRATEGIE (MEANDER) ~
+             Q225=-55 ;STARTPUNT 1E AS ~
+             Q226=-55 ;STARTPUNT 2E AS ~
+             Q227=+0 ;STARTPUNT 3E AS ~
+             Q386=-1.5 ;EINDPUNT 3E AS ~
+             Q218=+110 ;1E ZIJDENLENGTE ~
+             Q219=+110 ;2E ZIJDENLENGTE ~
+             Q202=+1.5 ;MAX. INSTEEKDIEPTE ~
+             Q369=+0 ;OVERMAAT BODEM ~
+             Q370=+1.2 ;OVERLAPPING ~
+             Q207=+800 ;VOEDING FREZEN ~
+             Q385=+600 ;VOEDING NASNIJDEN ~
+             Q253=+99999 ;VOEDING VOORPOS. ~
+             Q200=+2 ;VEILIGHEIDSAFST. ~
+             Q204=+50 ;2E VEILIGHEIDSAFST.
+        10 CYCL CALL
+        11 ; --- 2. CENTERBOOR OP STEEKCIRKEL MET 6 GATEN ---
+        12 TOOL CALL "CENTERBOOR" Z S3000 F250
+        13 CYCL DEF 240 CENTREREN ~
+             Q200=+2 ;VEILIGHEIDSAFST. ~
+             Q201=-3.5 ;DIEPTE ~
+             Q206=+200 ;VOEDING DIEPTEVERPL. ~
+             Q211=+0 ;STILSTANDTIJD ~
+             Q203=+0 ;COOR. OPPERVLAK ~
+             Q204=+50 ;2E VEILIGHEIDSAFST.
+        14 CYCL DEF 220 PUNKTEMUSTER KREIS ~
+             Q216=+0 ;MIDDEN 1E AS ~
+             Q217=+0 ;MIDDEN 2E AS ~
+             Q244=+70 ;STEEKCIRKELDIAMETER ~
+             Q245=+0 ;STARTHOEK ~
+             Q246=+360 ;STOPHOEK ~
+             Q247=+60 ;HOEKSTAP ~
+             Q241=+6 ;AANTAL BEWERKINGEN ~
+             Q200=+2 ;VEILIGHEIDSAFST. ~
+             Q203=+0 ;COOR. OPPERVLAK ~
+             Q204=+50 ;2E VEILIGHEIDSAFST. ~
+             Q301=+1 ;NAAR VEILIGE HOOGTE
+        15 CYCL CALL
+        16 ; --- 3. BOREN MET BOOR6 OP DEZELFDE STEEKCIRKEL ---
+        17 TOOL CALL "BOOR6" Z S2400 F180
+        18 CYCL DEF 200 BOHREN ~
+             Q200=+2 ;VEILIGHEIDSAFST. ~
+             Q201=-18 ;DIEPTE ~
+             Q206=+150 ;VOEDING DIEPTEVERPL. ~
+             Q202=+6 ;INSTEEKDIEPTE ~
+             Q210=+0 ;STILSTANDTIJD BOVEN ~
+             Q203=+0 ;COOR. OPPERVLAK ~
+             Q204=+50 ;2E VEILIGHEIDSAFST. ~
+             Q211=+0.1 ;STILSTANDTIJD ONDER
+        19 CYCL CALL
+        20 L Z+100 R0 FMAX M30
+        21 END PGM STEEKCIRKEL_VLAKFREES MM
+    """.trimIndent()
+
     val all: List<Pair<String, String>> = listOf(
         "CONTOURFREZEN_V4.H (Omtrek & Ontbramen)" to contourfrezenV4,
-        "BOOR_FREESCYCLI.H (Vlakken, Kamers, Sleuf)" to boorFreescycli,
+        "SL_CYCLI_EILANDEN.H (SL 14, 20, 22, 24 met Eilanden)" to slCycliEilanden,
+        "STEEKCIRKEL_VLAKFREES.H (Vlakken 232 & Steekcirkel 220)" to steekcirkelVlakfrees,
+        "BOOR_FREESCYCLI.H (Kamers & Sleuf)" to boorFreescycli,
         "KAMERSFREZEN_H5.H (Kamers & 3x M8 Tappen)" to kamersfrezenH5,
         "U_VORM_LABEL.H (Nulpunt Cyclus 7 & Boorfrees 208)" to uVormLabel,
         "PARAMETRISCH_ELLIPS_Q.H (Q-Parameters & FN 12 Lus)" to demoParametricEllipse,

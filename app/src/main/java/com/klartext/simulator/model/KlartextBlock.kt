@@ -249,10 +249,16 @@ sealed class KlartextBlock {
         val subNumber: Int = 0,
         val cycleName: String,
         val qParams: Map<Int, Float> = emptyMap(),
+        val rawQParams: Map<Int, String> = emptyMap(),
         val datumX: Float? = null,
         val datumY: Float? = null,
         val datumZ: Float? = null,
-        val isIncDatum: Boolean = false
+        val isIncDatum: Boolean = false,
+        val labels: List<String> = emptyList(),
+        val rotationAngle: Float? = null,
+        val rawRotationAngle: String? = null,
+        val mirrorAxes: Set<String> = emptySet(),
+        val isClearMirror: Boolean = false
     ) : KlartextBlock()
 
     data class CycleCall(

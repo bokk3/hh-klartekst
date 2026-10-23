@@ -326,4 +326,175 @@ class KlartextParserTest {
         assertEquals(DiagnosticSeverity.ERROR, collisions.first().severity)
         assertTrue(collisions.first().message.contains("Houder botst") || collisions.first().message.contains("Gereedschapshouder"))
     }
+
+    @Test
+    fun testPitchCircle220() {
+        val prog = """
+            0 BEGIN PGM PITCH_CIRCLE MM
+            1 BLK FORM 0.1 Z X-50 Y-50 Z-20
+            2 BLK FORM 0.2 X+50 Y+50 Z+0
+            3 TOOL CALL "BOOR6" Z S2000 F200
+            4 CYCL DEF 200 BOHREN ~
+              Q200=+2
+              Q201=-15
+              Q206=+150
+              Q202=+5
+              Q203=+0
+              Q204=+50
+            5 CYCL DEF 220 PUNKTEMUSTER KREIS ~
+              Q216=+0
+              Q217=+0
+              Q244=+60
+              Q245=+0
+              Q246=+360
+              Q247=+60
+              Q241=+6
+              Q200=+2
+              Q203=+0
+              Q204=+50
+              Q301=+1
+            6 CYCL CALL
+            7 L Z+50 R0 FMAX M30
+            8 END PGM PITCH_CIRCLE MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(prog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        val plunges = result.segments.filter { it.moveType == MoveType.PLUNGE && Math.abs(it.end.z - (-15f)) < 0.1f }
+        assertEquals(6, plunges.size)
+    }
+
+    @Test
+    fun testLinearPattern221() {
+        val prog = """
+            0 BEGIN PGM GRID_TEST MM
+            1 BLK FORM 0.1 Z X-10 Y-10 Z-20
+            2 BLK FORM 0.2 X+80 Y+60 Z+0
+            3 TOOL CALL "CENTERBOOR" Z S3000 F250
+            4 CYCL DEF 240 CENTREREN ~
+              Q200=+2
+              Q201=-3
+              Q206=+200
+              Q203=+0
+              Q204=+30
+            5 CYCL DEF 221 PUNKTEMUSTER LINIEN ~
+              Q225=+10
+              Q226=+10
+              Q237=+20
+              Q238=+15
+              Q242=+3
+              Q243=+2
+              Q224=+0
+              Q200=+2
+              Q203=+0
+              Q204=+30
+              Q301=+1
+            6 CYCL CALL
+            7 L Z+50 R0 FMAX M30
+            8 END PGM GRID_TEST MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(prog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        val centerHoles = result.segments.filter { it.moveType == MoveType.PLUNGE && Math.abs(it.end.z - (-3f)) < 0.1f }
+        assertEquals(6, centerHoles.size)
+    }
+
+    @Test
+    fun testFaceMilling232() {
+        val prog = """
+            0 BEGIN PGM FACE_MILL MM
+            1 BLK FORM 0.1 Z X-50 Y-50 Z-20
+            2 BLK FORM 0.2 X+50 Y+50 Z+0
+            3 TOOL CALL "VLAKFREES63" Z S2000 F800
+            4 CYCL DEF 232 PLANFRAESEN ~
+              Q389=+0
+              Q225=-50
+              Q226=-50
+              Q227=+0
+              Q386=-2
+              Q218=+100
+              Q219=+100
+              Q202=+2
+              Q369=+0
+              Q370=+1.2
+              Q207=+750
+              Q385=+600
+              Q253=+99999
+              Q200=+2
+              Q204=+50
+            5 CYCL CALL
+            6 L Z+50 R0 FMAX M30
+            7 END PGM FACE_MILL MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(prog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        val sweeps = result.segments.filter { it.moveType == MoveType.FEED && Math.abs(it.end.z - (-2f)) < 0.05f }
+        assertTrue(sweeps.size >= 3)
+    }
+
+    @Test
+    fun testRotationAndMirroring() {
+        val prog = """
+            0 BEGIN PGM TRANS_TEST MM
+            1 BLK FORM 0.1 Z X-50 Y-50 Z-20
+            2 BLK FORM 0.2 X+50 Y+50 Z+0
+            3 TOOL CALL "FREES10" Z S3000 F500
+            4 ; Test Rotation
+            5 CYCL DEF 10.0 DREHUNG
+            6 CYCL DEF 10.1 ROT+90
+            7 L X+50 Y+0 R0 FMAX
+            8 CYCL DEF 10.1 ROT+0
+            9 ; Test Mirroring
+            10 CYCL DEF 8.0 SPIEGELN
+            11 CYCL DEF 8.1 X
+            12 L X+40 Y+20 RL F500
+            13 CYCL DEF 8.1
+            14 END PGM TRANS_TEST MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(prog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        val rotMove = result.segments.first { it.lineNumber == 7 }
+        assertEquals(0f, rotMove.end.x, 0.1f)
+        assertEquals(50f, rotMove.end.y, 0.1f)
+
+        val mirrorMove = result.segments.first { it.lineNumber == 12 }
+        assertEquals(-40f, mirrorMove.programmedEnd.x, 0.1f)
+        assertEquals(RadiusComp.RR, mirrorMove.radiusComp)
+    }
+
+    @Test
+    fun testSlCyclesWithIslands() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.slCycliEilanden)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertTrue("SL cycles should generate feed segments", result.segments.count { it.moveType == MoveType.FEED } > 20)
+
+        // Verify island [-15, +15] is not gouged
+        val islandGouges = result.segments.filter { seg ->
+            seg.moveType == MoveType.FEED &&
+            Math.abs((seg.start.x + seg.end.x) / 2f) < 9.0f &&
+            Math.abs((seg.start.y + seg.end.y) / 2f) < 9.0f
+        }
+        assertEquals(0, islandGouges.size)
+    }
+
+    @Test
+    fun testSteekcirkelVlakfreesDemo() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.steekcirkelVlakfrees)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertTrue(result.segments.isNotEmpty())
+    }
 }

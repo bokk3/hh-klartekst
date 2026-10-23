@@ -15,6 +15,14 @@ class KlartextInterpreter {
         var datumY = 0f
         var datumZ = 0f
 
+        var mirrorX = false
+        var mirrorY = false
+        var rotAngleDeg = 0f
+
+        var activeSlLabels = listOf<String>()
+        var activeSlData: KlartextBlock.CycleDef? = null
+        var lastMachiningCycle: KlartextBlock.CycleDef? = null
+
         var activeTool: TncTool = ToolTable.defaultTools[3] // Default FREES10
         var activeDl = 0f
         var activeDr = 0f
@@ -84,6 +92,67 @@ class KlartextInterpreter {
                 }
                 activeRadiusComp = explicit
             }
+        }
+
+        fun isOddMirror(): Boolean = mirrorX xor mirrorY
+
+        fun transformRadiusComp(comp: RadiusComp): RadiusComp {
+            if (!isOddMirror()) return comp
+            return when (comp) {
+                RadiusComp.RL -> RadiusComp.RR
+                RadiusComp.RR -> RadiusComp.RL
+                RadiusComp.R0 -> RadiusComp.R0
+            }
+        }
+
+        fun transformCircleDir(dir: Direction): Direction {
+            if (!isOddMirror()) return dir
+            return when (dir) {
+                Direction.CW -> Direction.CCW
+                Direction.CCW -> Direction.CW
+            }
+        }
+
+        fun transformPoint2D(px: Float, py: Float, isIncremental: Boolean = false): Point2D {
+            val mx = if (mirrorX) -px else px
+            val my = if (mirrorY) -py else py
+
+            val rad = Math.toRadians(rotAngleDeg.toDouble())
+            val cosA = cos(rad).toFloat()
+            val sinA = sin(rad).toFloat()
+
+            val rx = mx * cosA - my * sinA
+            val ry = mx * sinA + my * cosA
+
+            return if (isIncremental) {
+                Point2D(rx, ry)
+            } else {
+                Point2D(datumX + rx, datumY + ry)
+            }
+        }
+
+        fun unprojectToWorkpiece2D(worldX: Float, worldY: Float): Point2D {
+            val dx = worldX - datumX
+            val dy = worldY - datumY
+            val rad = -Math.toRadians(rotAngleDeg.toDouble())
+            val cosA = cos(rad).toFloat()
+            val sinA = sin(rad).toFloat()
+            var wx = dx * cosA - dy * sinA
+            var wy = dx * sinA + dy * cosA
+            if (mirrorX) wx = -wx
+            if (mirrorY) wy = -wy
+            return Point2D(wx, wy)
+        }
+
+        fun resolveTargetXY(
+            rx: Float?, ry: Float?,
+            isIncX: Boolean, isIncY: Boolean,
+            curX: Float, curY: Float
+        ): Point2D {
+            val curW = unprojectToWorkpiece2D(curX, curY)
+            val wx = if (isIncX) curW.x + (rx ?: 0f) else (rx ?: curW.x)
+            val wy = if (isIncY) curW.y + (ry ?: 0f) else (ry ?: curW.y)
+            return transformPoint2D(wx, wy, false)
         }
 
         fun applyOffset2D(pt: Point2D, tangent: Point2D, comp: RadiusComp, rEff: Float): Point2D {
@@ -313,41 +382,209 @@ class KlartextInterpreter {
                     is KlartextBlock.Linear -> {
                         val rx = resolveCoord(nb.rawX, nb.x, qParams)
                         val ry = resolveCoord(nb.rawY, nb.y, qParams)
-                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
-                        if (hypot(nx - curX, ny - curY) > 1e-4f) return Point2D(nx, ny)
+                        val targetPt = resolveTargetXY(rx, ry, nb.isIncrementalX, nb.isIncrementalY, curX, curY)
+                        if (targetPt.distanceTo(Point2D(curX, curY)) > 1e-4f) return targetPt
                     }
                     is KlartextBlock.CircleRadius -> {
                         val rx = resolveCoord(nb.rawX, nb.x, qParams)
                         val ry = resolveCoord(nb.rawY, nb.y, qParams)
-                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
-                        return Point2D(nx, ny)
+                        return resolveTargetXY(rx, ry, nb.isIncrementalX, nb.isIncrementalY, curX, curY)
                     }
                     is KlartextBlock.Circle -> {
                         val rx = resolveCoord(nb.rawX, nb.x, qParams)
                         val ry = resolveCoord(nb.rawY, nb.y, qParams)
-                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
-                        return Point2D(nx, ny)
+                        return resolveTargetXY(rx, ry, nb.isIncrementalX, nb.isIncrementalY, curX, curY)
                     }
                     is KlartextBlock.CircleTangential -> {
                         val rx = resolveCoord(nb.rawX, nb.x, qParams)
                         val ry = resolveCoord(nb.rawY, nb.y, qParams)
-                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
-                        return Point2D(nx, ny)
+                        return resolveTargetXY(rx, ry, nb.isIncrementalX, nb.isIncrementalY, curX, curY)
                     }
                     is KlartextBlock.Depart -> {
-                        val nx = nb.x?.plus(datumX) ?: (curX + lastTangent.x * (nb.len ?: 10f))
-                        val ny = nb.y?.plus(datumY) ?: (curY + lastTangent.y * (nb.len ?: 10f))
-                        return Point2D(nx, ny)
+                        val targetPt = if (nb.x != null || nb.y != null) {
+                            resolveTargetXY(nb.x, nb.y, false, false, curX, curY)
+                        } else {
+                            Point2D(curX + lastTangent.x * (nb.len ?: 10f), curY + lastTangent.y * (nb.len ?: 10f))
+                        }
+                        return targetPt
                     }
                     is KlartextBlock.Comment -> continue
                     else -> break
                 }
             }
             return null
+        }
+
+        fun dispatchCycleCall(cycle: KlartextBlock.CycleDef, callLine: Int) {
+            when (cycle.cycleNumber) {
+                220 -> {
+                    val endPos = executePitchCircle220(
+                        cycle = cycle,
+                        machiningCycle = lastMachiningCycle,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumX = datumX,
+                        datumY = datumY,
+                        datumZ = datumZ,
+                        mirrorX = mirrorX,
+                        mirrorY = mirrorY,
+                        rotAngleDeg = rotAngleDeg,
+                        stockMin = stockMin,
+                        stockMax = stockMax,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                    currentX = endPos.x
+                    currentY = endPos.y
+                    currentZ = endPos.z
+                }
+                221 -> {
+                    val endPos = executeLinearPattern221(
+                        cycle = cycle,
+                        machiningCycle = lastMachiningCycle,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumX = datumX,
+                        datumY = datumY,
+                        datumZ = datumZ,
+                        mirrorX = mirrorX,
+                        mirrorY = mirrorY,
+                        rotAngleDeg = rotAngleDeg,
+                        stockMin = stockMin,
+                        stockMax = stockMax,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                    currentX = endPos.x
+                    currentY = endPos.y
+                    currentZ = endPos.z
+                }
+                232, 233 -> {
+                    currentZ = executeFaceMilling232(
+                        cycle = cycle,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumZ = datumZ,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments
+                    )
+                }
+                22 -> {
+                    currentZ = executeSlRoughing22(
+                        cycle22 = cycle,
+                        cycle20 = activeSlData,
+                        slLabels = activeSlLabels,
+                        blocks = blocks,
+                        labelMapByName = labelMapByName,
+                        labelMapByNumber = labelMapByNumber,
+                        qParams = qParams,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumZ = datumZ,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                }
+                24 -> {
+                    currentZ = executeSlSideFinishing24(
+                        cycle24 = cycle,
+                        cycle20 = activeSlData,
+                        slLabels = activeSlLabels,
+                        blocks = blocks,
+                        labelMapByName = labelMapByName,
+                        labelMapByNumber = labelMapByNumber,
+                        qParams = qParams,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumZ = datumZ,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                }
+                23 -> {
+                    currentZ = executeSlFloorFinishing23(
+                        cycle23 = cycle,
+                        cycle20 = activeSlData,
+                        slLabels = activeSlLabels,
+                        blocks = blocks,
+                        labelMapByName = labelMapByName,
+                        labelMapByNumber = labelMapByNumber,
+                        qParams = qParams,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumZ = datumZ,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                }
+                else -> {
+                    currentZ = executeFixedCycle(
+                        cycle = cycle,
+                        callLine = callLine,
+                        cx = currentX,
+                        cy = currentY,
+                        cz = currentZ,
+                        datumZ = datumZ,
+                        stockMin = stockMin,
+                        stockMax = stockMax,
+                        tool = activeTool,
+                        effectiveRadius = effectiveRadius,
+                        dl = activeDl,
+                        dr = activeDr,
+                        feed = currentFeed,
+                        speed = currentSpeed,
+                        segments = segments,
+                        diagnostics = diagnostics
+                    )
+                }
+            }
         }
 
         while (pc in blocks.indices && loopBudget-- > 0) {
@@ -370,23 +607,18 @@ class KlartextInterpreter {
                 is KlartextBlock.CircleCenter -> {
                     val rx = resolveCoord(block.rawX, block.x, qParams)
                     val ry = resolveCoord(block.rawY, block.y, qParams)
-                    circleCenterX = when {
-                        rx == null -> currentX
-                        block.isIncrementalX || block.isIncremental -> currentX + rx
-                        else -> rx + datumX
-                    }
-                    circleCenterY = when {
-                        ry == null -> currentY
-                        block.isIncrementalY || block.isIncremental -> currentY + ry
-                        else -> ry + datumY
-                    }
+                    val pt = resolveTargetXY(rx, ry, block.isIncrementalX || block.isIncremental, block.isIncrementalY || block.isIncremental, currentX, currentY)
+                    circleCenterX = pt.x
+                    circleCenterY = pt.y
                 }
 
                 is KlartextBlock.Approach -> {
                     activeRadiusComp = block.comp
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
                     block.feedRate?.let { currentFeed = it }
-                    val targetX = block.x + datumX
-                    val targetY = block.y + datumY
+                    val targetPt = resolveTargetXY(block.x, block.y, false, false, currentX, currentY)
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val targetZ = block.z?.plus(datumZ) ?: currentZ
 
                     // Determine contour direction from next block
@@ -400,7 +632,7 @@ class KlartextInterpreter {
 
                     val progStart = Point3D(currentX, currentY, currentZ)
                     val progEnd = Point3D(targetX, targetY, targetZ)
-                    addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, activeRadiusComp)
+                    addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, effectiveComp)
 
                     currentX = targetX
                     currentY = targetY
@@ -410,8 +642,13 @@ class KlartextInterpreter {
                 is KlartextBlock.Depart -> {
                     block.feedRate?.let { currentFeed = it }
                     val len = block.len ?: block.radius ?: 10f
-                    val targetX = block.x?.plus(datumX) ?: (currentX + lastTangent.x * len)
-                    val targetY = block.y?.plus(datumY) ?: (currentY + lastTangent.y * len)
+                    val targetPt = if (block.x != null || block.y != null) {
+                        resolveTargetXY(block.x, block.y, false, false, currentX, currentY)
+                    } else {
+                        Point2D(currentX + lastTangent.x * len, currentY + lastTangent.y * len)
+                    }
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val targetZ = block.z?.plus(datumZ) ?: currentZ
 
                     val progStart = Point3D(currentX, currentY, currentZ)
@@ -432,16 +669,9 @@ class KlartextInterpreter {
                     val rz = resolveCoord(block.rawZ, block.z, qParams)
                     val rFeed = resolveCoord(block.rawFeed, block.feedRate, qParams)
 
-                    val targetX = when {
-                        rx == null -> currentX
-                        block.isIncrementalX -> currentX + rx
-                        else -> rx + datumX
-                    }
-                    val targetY = when {
-                        ry == null -> currentY
-                        block.isIncrementalY -> currentY + ry
-                        else -> ry + datumY
-                    }
+                    val targetPt = resolveTargetXY(rx, ry, block.isIncrementalX, block.isIncrementalY, currentX, currentY)
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val targetZ = when {
                         rz == null -> currentZ
                         block.isIncrementalZ -> currentZ + rz
@@ -466,7 +696,8 @@ class KlartextInterpreter {
                     val progEnd = Point3D(targetX, targetY, targetZ)
                     val feed = if (block.isRapid) 99999f else (rFeed ?: currentFeed)
 
-                    addLinearSegment(block.lineNumber, progStart, progEnd, moveType, feed, activeRadiusComp)
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
+                    addLinearSegment(block.lineNumber, progStart, progEnd, moveType, feed, effectiveComp)
 
                     currentX = targetX
                     currentY = targetY
@@ -475,24 +706,7 @@ class KlartextInterpreter {
                     // Execute active cycle if M99 is on this block
                     val curCycle = activeCycle
                     if (block.mCodes.contains(99) && curCycle != null) {
-                        currentZ = executeFixedCycle(
-                            cycle = curCycle,
-                            callLine = block.lineNumber,
-                            cx = currentX,
-                            cy = currentY,
-                            cz = currentZ,
-                            datumZ = datumZ,
-                            stockMin = stockMin,
-                            stockMax = stockMax,
-                            tool = activeTool,
-                            effectiveRadius = effectiveRadius,
-                            dl = activeDl,
-                            dr = activeDr,
-                            feed = currentFeed,
-                            speed = currentSpeed,
-                            segments = segments,
-                            diagnostics = diagnostics
-                        )
+                        dispatchCycleCall(curCycle, block.lineNumber)
                     }
                 }
 
@@ -500,7 +714,8 @@ class KlartextInterpreter {
                     val rPR = resolveCoord(block.rawPR, block.pr, qParams) ?: block.pr
                     val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
                     val rZ = resolveCoord(block.rawZ, block.z, qParams)
-                    val angleRad = Math.toRadians(rPA.toDouble()).toFloat()
+                    val effectivePA = if (isOddMirror()) -(rPA + rotAngleDeg) else (rPA + rotAngleDeg)
+                    val angleRad = Math.toRadians(effectivePA.toDouble()).toFloat()
                     val targetX = circleCenterX + rPR * cos(angleRad)
                     val targetY = circleCenterY + rPR * sin(angleRad)
                     val targetZ = rZ?.plus(datumZ) ?: currentZ
@@ -512,13 +727,14 @@ class KlartextInterpreter {
                     val moveType = if (block.isRapid) MoveType.RAPID else MoveType.FEED
                     val feed = if (block.isRapid) 99999f else (block.feedRate ?: currentFeed)
 
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
                     addLinearSegment(
                         block.lineNumber,
                         Point3D(currentX, currentY, currentZ),
                         Point3D(targetX, targetY, targetZ),
                         moveType,
                         feed,
-                        activeRadiusComp
+                        effectiveComp
                     )
                     currentX = targetX
                     currentY = targetY
@@ -526,35 +742,23 @@ class KlartextInterpreter {
 
                     val curCycPolar = activeCycle
                     if (block.mCodes.contains(99) && curCycPolar != null) {
-                        currentZ = executeFixedCycle(
-                            curCycPolar, block.lineNumber, currentX, currentY, currentZ, datumZ,
-                            stockMin, stockMax, activeTool, effectiveRadius, activeDl, activeDr,
-                            currentFeed, currentSpeed, segments, diagnostics
-                        )
+                        dispatchCycleCall(curCycPolar, block.lineNumber)
                     }
                 }
 
                 is KlartextBlock.Circle -> {
-                    updateModalComp(block.explicitComp, block.lineNumber, true)
-                    val start = Point3D(currentX, currentY, currentZ)
                     val rx = resolveCoord(block.rawX, block.x, qParams)
                     val ry = resolveCoord(block.rawY, block.y, qParams)
                     val rz = resolveCoord(block.rawZ, block.z, qParams)
-                    val targetX = when {
-                        rx == null -> currentX
-                        block.isIncrementalX -> currentX + rx
-                        else -> rx + datumX
-                    }
-                    val targetY = when {
-                        ry == null -> currentY
-                        block.isIncrementalY -> currentY + ry
-                        else -> ry + datumY
-                    }
+                    val targetPt = resolveTargetXY(rx, ry, block.isIncrementalX, block.isIncrementalY, currentX, currentY)
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val targetZ = when {
                         rz == null -> currentZ
                         block.isIncrementalZ -> currentZ + rz
                         else -> rz + datumZ
                     }
+                    val start = Point3D(currentX, currentY, currentZ)
                     val end = Point3D(targetX, targetY, targetZ)
                     val center = Point2D(circleCenterX, circleCenterY)
                     val rStart = hypot(start.x - center.x, start.y - center.y)
@@ -573,6 +777,10 @@ class KlartextInterpreter {
                         )
                     }
 
+                    val effectiveDir = transformCircleDir(block.direction)
+                    updateModalComp(block.explicitComp, block.lineNumber, true)
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
+
                     block.feedRate?.let { currentFeed = it }
                     val moveType = if (block.isRapid) MoveType.RAPID else MoveType.FEED
                     val feed = if (block.isRapid) 99999f else (block.feedRate ?: currentFeed)
@@ -583,28 +791,35 @@ class KlartextInterpreter {
                         progEnd = end,
                         center = center,
                         progRadius = rStart,
-                        direction = block.direction,
+                        direction = effectiveDir,
                         moveType = moveType,
                         feed = feed,
-                        comp = activeRadiusComp
+                        comp = effectiveComp
                     )
                     currentX = targetX
                     currentY = targetY
                     currentZ = targetZ
+
+                    if (block.mCodes.contains(99) && activeCycle != null) {
+                        dispatchCycleCall(activeCycle, block.lineNumber)
+                    }
                 }
 
                 is KlartextBlock.CirclePolar -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
                     val start = Point3D(currentX, currentY, currentZ)
                     val center = Point2D(circleCenterX, circleCenterY)
                     val r = hypot(start.x - center.x, start.y - center.y)
                     val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
                     val rZ = resolveCoord(block.rawZ, block.z, qParams)
-                    val angleRad = Math.toRadians(rPA.toDouble()).toFloat()
+                    val effectivePA = if (isOddMirror()) -(rPA + rotAngleDeg) else (rPA + rotAngleDeg)
+                    val angleRad = Math.toRadians(effectivePA.toDouble()).toFloat()
                     val targetX = center.x + r * cos(angleRad)
                     val targetY = center.y + r * sin(angleRad)
                     val targetZ = rZ?.plus(datumZ) ?: currentZ
                     val end = Point3D(targetX, targetY, targetZ)
+                    val effectiveDir = transformCircleDir(block.direction)
 
                     block.feedRate?.let { currentFeed = it }
                     addArcSegment(
@@ -613,10 +828,10 @@ class KlartextInterpreter {
                         progEnd = end,
                         center = center,
                         progRadius = r,
-                        direction = block.direction,
+                        direction = effectiveDir,
                         moveType = MoveType.FEED,
                         feed = block.feedRate ?: currentFeed,
-                        comp = activeRadiusComp
+                        comp = effectiveComp
                     )
                     currentX = targetX
                     currentY = targetY
@@ -625,21 +840,24 @@ class KlartextInterpreter {
 
                 is KlartextBlock.CircleRadius -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
                     val start = Point3D(currentX, currentY, currentZ)
                     val rx = resolveCoord(block.rawX, block.x, qParams)
                     val ry = resolveCoord(block.rawY, block.y, qParams)
                     val rr = resolveCoord(block.rawRadius, block.radius, qParams) ?: block.radius
-                    val targetX = if (block.isIncrementalX) currentX + (rx ?: 0f) else (rx?.plus(datumX) ?: currentX)
-                    val targetY = if (block.isIncrementalY) currentY + (ry ?: 0f) else (ry?.plus(datumY) ?: currentY)
+                    val targetPt = resolveTargetXY(rx, ry, block.isIncrementalX, block.isIncrementalY, currentX, currentY)
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val end = Point3D(targetX, targetY, currentZ)
                     val r = abs(rr)
                     val longArc = rr < 0f
+                    val effectiveDir = transformCircleDir(block.direction)
 
                     val center = calculateArcCenter(
                         Point2D(start.x, start.y),
                         Point2D(targetX, targetY),
                         r,
-                        isCw = block.direction == Direction.CW,
+                        isCw = effectiveDir == Direction.CW,
                         longArc = longArc
                     )
 
@@ -653,10 +871,10 @@ class KlartextInterpreter {
                         progEnd = end,
                         center = center,
                         progRadius = r,
-                        direction = block.direction,
+                        direction = effectiveDir,
                         moveType = moveType,
                         feed = feed,
-                        comp = activeRadiusComp
+                        comp = effectiveComp
                     )
                     currentX = targetX
                     currentY = targetY
@@ -664,12 +882,14 @@ class KlartextInterpreter {
 
                 is KlartextBlock.CircleTangential -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
+                    val effectiveComp = transformRadiusComp(activeRadiusComp)
                     val start = Point3D(currentX, currentY, currentZ)
                     val rx = resolveCoord(block.rawX, block.x, qParams)
                     val ry = resolveCoord(block.rawY, block.y, qParams)
                     val rz = resolveCoord(block.rawZ, block.z, qParams)
-                    val targetX = if (block.isIncrementalX) currentX + (rx ?: 0f) else (rx?.plus(datumX) ?: currentX)
-                    val targetY = if (block.isIncrementalY) currentY + (ry ?: 0f) else (ry?.plus(datumY) ?: currentY)
+                    val targetPt = resolveTargetXY(rx, ry, block.isIncrementalX, block.isIncrementalY, currentX, currentY)
+                    val targetX = targetPt.x
+                    val targetY = targetPt.y
                     val targetZ = rz?.plus(datumZ) ?: currentZ
                     val end = Point3D(targetX, targetY, targetZ)
 
@@ -687,6 +907,7 @@ class KlartextInterpreter {
                         val center = p1 + normal * s
                         val r = abs(s)
                         val dir = if (s > 0f) Direction.CCW else Direction.CW
+                        val effectiveDir = transformCircleDir(dir)
 
                         addArcSegment(
                             lineNum = block.lineNumber,
@@ -694,13 +915,13 @@ class KlartextInterpreter {
                             progEnd = end,
                             center = center,
                             progRadius = r,
-                            direction = dir,
+                            direction = effectiveDir,
                             moveType = MoveType.FEED,
                             feed = feed,
-                            comp = activeRadiusComp
+                            comp = effectiveComp
                         )
                     } else {
-                        addLinearSegment(block.lineNumber, start, end, MoveType.FEED, feed, activeRadiusComp)
+                        addLinearSegment(block.lineNumber, start, end, MoveType.FEED, feed, effectiveComp)
                     }
 
                     currentX = targetX
@@ -822,42 +1043,59 @@ class KlartextInterpreter {
                 }
 
                 is KlartextBlock.CycleDef -> {
-                    if (block.cycleNumber == 7) {
-                        if (block.subNumber == 0) {
-                            // Next 7.1, 7.2, 7.3 lines will set datum
-                        } else {
-                            block.datumX?.let { datumX = if (block.isIncDatum) datumX + it else it }
-                            block.datumY?.let { datumY = if (block.isIncDatum) datumY + it else it }
-                            block.datumZ?.let { datumZ = if (block.isIncDatum) datumZ + it else it }
+                    when (block.cycleNumber) {
+                        7 -> {
+                            if (block.subNumber == 0) {
+                                datumX = 0f
+                                datumY = 0f
+                                datumZ = 0f
+                            } else {
+                                block.datumX?.let { datumX = if (block.isIncDatum) datumX + it else it }
+                                block.datumY?.let { datumY = if (block.isIncDatum) datumY + it else it }
+                                block.datumZ?.let { datumZ = if (block.isIncDatum) datumZ + it else it }
+                            }
                         }
-                    } else {
-                        activeCycle = block
-                        // Also pre-validate Cycle 206 / 208 immediately upon definition if parameters are invalid
-                        validateCycleDefinition(block, activeTool, effectiveRadius, currentSpeed, diagnostics)
+                        8 -> {
+                            if (block.isClearMirror) {
+                                mirrorX = false
+                                mirrorY = false
+                            } else {
+                                mirrorX = block.mirrorAxes.contains("X")
+                                mirrorY = block.mirrorAxes.contains("Y")
+                            }
+                        }
+                        10 -> {
+                            val rot = block.rotationAngle ?: resolveCoord(block.rawRotationAngle, null, qParams) ?: 0f
+                            rotAngleDeg = rot
+                        }
+                        14 -> {
+                            activeSlLabels = block.labels
+                        }
+                        20 -> {
+                            activeSlData = block
+                            activeCycle = block
+                        }
+                        220, 221 -> {
+                            activeCycle = block
+                            val nextBlock = blocks.getOrNull(pc + 1)
+                            val nextIsCall = nextBlock is KlartextBlock.CycleCall ||
+                                    (nextBlock is KlartextBlock.Linear && nextBlock.mCodes.contains(99))
+                            if (!nextIsCall) {
+                                dispatchCycleCall(block, block.lineNumber)
+                            }
+                        }
+                        else -> {
+                            activeCycle = block
+                            lastMachiningCycle = block
+                            validateCycleDefinition(block, activeTool, effectiveRadius, currentSpeed, diagnostics)
+                        }
                     }
                 }
 
                 is KlartextBlock.CycleCall -> {
                     val curCycle = activeCycle
                     if (curCycle != null) {
-                        currentZ = executeFixedCycle(
-                            cycle = curCycle,
-                            callLine = block.lineNumber,
-                            cx = currentX,
-                            cy = currentY,
-                            cz = currentZ,
-                            datumZ = datumZ,
-                            stockMin = stockMin,
-                            stockMax = stockMax,
-                            tool = activeTool,
-                            effectiveRadius = effectiveRadius,
-                            dl = activeDl,
-                            dr = activeDr,
-                            feed = currentFeed,
-                            speed = currentSpeed,
-                            segments = segments,
-                            diagnostics = diagnostics
-                        )
+                        dispatchCycleCall(curCycle, block.lineNumber)
                     }
                 }
 
@@ -1330,6 +1568,885 @@ class KlartextInterpreter {
         var sign = if (isCw) -1f else 1f
         if (longArc) sign = -sign
         return Point2D(mx + sign * ux * h, my + sign * uy * h)
+    }
+
+    private fun transformPoint(
+        px: Float, py: Float,
+        datumX: Float, datumY: Float,
+        mirrorX: Boolean, mirrorY: Boolean,
+        rotAngleDeg: Float,
+        isIncremental: Boolean = false
+    ): Point2D {
+        val mx = if (mirrorX) -px else px
+        val my = if (mirrorY) -py else py
+
+        val rad = Math.toRadians(rotAngleDeg.toDouble())
+        val cosA = cos(rad).toFloat()
+        val sinA = sin(rad).toFloat()
+
+        val rx = mx * cosA - my * sinA
+        val ry = mx * sinA + my * cosA
+
+        return if (isIncremental) {
+            Point2D(rx, ry)
+        } else {
+            Point2D(datumX + rx, datumY + ry)
+        }
+    }
+
+    private fun executePitchCircle220(
+        cycle: KlartextBlock.CycleDef,
+        machiningCycle: KlartextBlock.CycleDef?,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumX: Float,
+        datumY: Float,
+        datumZ: Float,
+        mirrorX: Boolean,
+        mirrorY: Boolean,
+        rotAngleDeg: Float,
+        stockMin: Point3D,
+        stockMax: Point3D,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>,
+        diagnostics: MutableList<TncDiagnostic>
+    ): Point3D {
+        if (machiningCycle == null) {
+            diagnostics.add(
+                TncDiagnostic(
+                    lineNumber = callLine,
+                    code = TncErrorCode.NO_CYCLE_ACTIVE_FOR_PATTERN,
+                    severity = DiagnosticSeverity.WARNING,
+                    title = "Geen bewerkingscyclus actief voor patroon",
+                    message = "CYCL 220 aangeroepen op regel $callLine maar er is vooraf geen bewerkingscyclus (bijv. CYCL 200) gedefinieerd!"
+                )
+            )
+            return Point3D(cx, cy, cz)
+        }
+
+        val q216 = cycle.qParams[216] ?: 0f
+        val q217 = cycle.qParams[217] ?: 0f
+        val q244 = cycle.qParams[244] ?: 50f
+        val r = q244 / 2f
+        val q245 = cycle.qParams[245] ?: 0f
+        val q246 = cycle.qParams[246] ?: (q245 + 360f)
+        val q247 = cycle.qParams[247] ?: 0f
+        val q241 = (cycle.qParams[241] ?: 4f).toInt().coerceAtLeast(1)
+        val q200 = cycle.qParams[200] ?: 2f
+        val q203 = (cycle.qParams[203] ?: 0f) + datumZ
+        val q204 = cycle.qParams[204] ?: 50f
+        val q301 = cycle.qParams[301] ?: 1f
+
+        val safeZ = q203 + q200
+        val retractZ = max(safeZ, q203 + q204)
+        val traverseZ = if (q301 == 1f) retractZ else safeZ
+
+        val angles = mutableListOf<Float>()
+        if (abs(q247) > 1e-4f) {
+            for (i in 0 until q241) angles.add(q245 + i * q247)
+        } else {
+            val span = q246 - q245
+            val step = if (abs(abs(span) - 360f) < 1e-2f) span / q241 else if (q241 > 1) span / (q241 - 1) else 0f
+            for (i in 0 until q241) angles.add(q245 + i * step)
+        }
+
+        var curToolZ = cz
+        var lastX = cx
+        var lastY = cy
+
+        for (i in 0 until q241) {
+            val angRad = Math.toRadians(angles[i].toDouble()).toFloat()
+            val rawHoleX = q216 + r * cos(angRad)
+            val rawHoleY = q217 + r * sin(angRad)
+            val holePt = transformPoint(rawHoleX, rawHoleY, datumX, datumY, mirrorX, mirrorY, rotAngleDeg, false)
+
+            segments.add(
+                ToolpathSegment.Linear(
+                    lineNumber = callLine,
+                    start = Point3D(lastX, lastY, curToolZ),
+                    end = Point3D(holePt.x, holePt.y, traverseZ),
+                    moveType = MoveType.RAPID,
+                    feedRate = 99999f,
+                    spindleSpeed = speed,
+                    toolNumber = tool.number,
+                    toolName = tool.name,
+                    toolRadius = tool.radius,
+                    effectiveRadius = effectiveRadius,
+                    dl = dl,
+                    dr = dr,
+                    toolGeometry = tool.geometryType,
+                    pointAngleDeg = tool.pointAngleDeg
+                )
+            )
+
+            curToolZ = executeFixedCycle(
+                cycle = machiningCycle,
+                callLine = callLine,
+                cx = holePt.x,
+                cy = holePt.y,
+                cz = traverseZ,
+                datumZ = datumZ,
+                stockMin = stockMin,
+                stockMax = stockMax,
+                tool = tool,
+                effectiveRadius = effectiveRadius,
+                dl = dl,
+                dr = dr,
+                feed = feed,
+                speed = speed,
+                segments = segments,
+                diagnostics = diagnostics
+            )
+            lastX = holePt.x
+            lastY = holePt.y
+        }
+
+        if (curToolZ < retractZ) {
+            segments.add(
+                ToolpathSegment.Linear(
+                    lineNumber = callLine,
+                    start = Point3D(lastX, lastY, curToolZ),
+                    end = Point3D(lastX, lastY, retractZ),
+                    moveType = MoveType.RAPID,
+                    feedRate = 99999f,
+                    spindleSpeed = speed,
+                    toolNumber = tool.number,
+                    toolName = tool.name,
+                    toolRadius = tool.radius,
+                    effectiveRadius = effectiveRadius,
+                    dl = dl,
+                    dr = dr,
+                    toolGeometry = tool.geometryType,
+                    pointAngleDeg = tool.pointAngleDeg
+                )
+            )
+            curToolZ = retractZ
+        }
+
+        return Point3D(lastX, lastY, curToolZ)
+    }
+
+    private fun executeLinearPattern221(
+        cycle: KlartextBlock.CycleDef,
+        machiningCycle: KlartextBlock.CycleDef?,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumX: Float,
+        datumY: Float,
+        datumZ: Float,
+        mirrorX: Boolean,
+        mirrorY: Boolean,
+        rotAngleDeg: Float,
+        stockMin: Point3D,
+        stockMax: Point3D,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>,
+        diagnostics: MutableList<TncDiagnostic>
+    ): Point3D {
+        if (machiningCycle == null) {
+            diagnostics.add(
+                TncDiagnostic(
+                    lineNumber = callLine,
+                    code = TncErrorCode.NO_CYCLE_ACTIVE_FOR_PATTERN,
+                    severity = DiagnosticSeverity.WARNING,
+                    title = "Geen bewerkingscyclus actief voor patroon",
+                    message = "CYCL 221 aangeroepen op regel $callLine maar er is vooraf geen bewerkingscyclus gedefinieerd!"
+                )
+            )
+            return Point3D(cx, cy, cz)
+        }
+
+        val q225 = cycle.qParams[225] ?: 0f
+        val q226 = cycle.qParams[226] ?: 0f
+        val q237 = cycle.qParams[237] ?: 10f
+        val q238 = cycle.qParams[238] ?: 10f
+        val q242 = (cycle.qParams[242] ?: 2f).toInt().coerceAtLeast(1)
+        val q243 = (cycle.qParams[243] ?: 2f).toInt().coerceAtLeast(1)
+        val q224 = cycle.qParams[224] ?: 0f
+        val q200 = cycle.qParams[200] ?: 2f
+        val q203 = (cycle.qParams[203] ?: 0f) + datumZ
+        val q204 = cycle.qParams[204] ?: 50f
+        val q301 = cycle.qParams[301] ?: 1f
+
+        val safeZ = q203 + q200
+        val retractZ = max(safeZ, q203 + q204)
+        val traverseZ = if (q301 == 1f) retractZ else safeZ
+
+        val radPattern = Math.toRadians(q224.toDouble()).toFloat()
+        val cosP = cos(radPattern)
+        val sinP = sin(radPattern)
+
+        var curToolZ = cz
+        var lastX = cx
+        var lastY = cy
+
+        for (row in 0 until q243) {
+            for (col in 0 until q242) {
+                val dx = col * q237
+                val dy = row * q238
+                val patX = q225 + (dx * cosP - dy * sinP)
+                val patY = q226 + (dx * sinP + dy * cosP)
+                val holePt = transformPoint(patX, patY, datumX, datumY, mirrorX, mirrorY, rotAngleDeg, false)
+
+                segments.add(
+                    ToolpathSegment.Linear(
+                        lineNumber = callLine,
+                        start = Point3D(lastX, lastY, curToolZ),
+                        end = Point3D(holePt.x, holePt.y, traverseZ),
+                        moveType = MoveType.RAPID,
+                        feedRate = 99999f,
+                        spindleSpeed = speed,
+                        toolNumber = tool.number,
+                        toolName = tool.name,
+                        toolRadius = tool.radius,
+                        effectiveRadius = effectiveRadius,
+                        dl = dl,
+                        dr = dr,
+                        toolGeometry = tool.geometryType,
+                        pointAngleDeg = tool.pointAngleDeg
+                    )
+                )
+
+                curToolZ = executeFixedCycle(
+                    cycle = machiningCycle,
+                    callLine = callLine,
+                    cx = holePt.x,
+                    cy = holePt.y,
+                    cz = traverseZ,
+                    datumZ = datumZ,
+                    stockMin = stockMin,
+                    stockMax = stockMax,
+                    tool = tool,
+                    effectiveRadius = effectiveRadius,
+                    dl = dl,
+                    dr = dr,
+                    feed = feed,
+                    speed = speed,
+                    segments = segments,
+                    diagnostics = diagnostics
+                )
+                lastX = holePt.x
+                lastY = holePt.y
+            }
+        }
+
+        if (curToolZ < retractZ) {
+            segments.add(
+                ToolpathSegment.Linear(
+                    lineNumber = callLine,
+                    start = Point3D(lastX, lastY, curToolZ),
+                    end = Point3D(lastX, lastY, retractZ),
+                    moveType = MoveType.RAPID,
+                    feedRate = 99999f,
+                    spindleSpeed = speed,
+                    toolNumber = tool.number,
+                    toolName = tool.name,
+                    toolRadius = tool.radius,
+                    effectiveRadius = effectiveRadius,
+                    dl = dl,
+                    dr = dr,
+                    toolGeometry = tool.geometryType,
+                    pointAngleDeg = tool.pointAngleDeg
+                )
+            )
+            curToolZ = retractZ
+        }
+
+        return Point3D(lastX, lastY, curToolZ)
+    }
+
+    private fun executeFaceMilling232(
+        cycle: KlartextBlock.CycleDef,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumZ: Float,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>
+    ): Float {
+        val strategy = (cycle.qParams[389] ?: 0f).toInt()
+        val q225 = cycle.qParams[225] ?: 0f
+        val q226 = cycle.qParams[226] ?: 0f
+        val q227 = (cycle.qParams[227] ?: 0f) + datumZ
+        val q386 = (cycle.qParams[386] ?: -2f) + datumZ
+        val q218 = cycle.qParams[218] ?: 100f
+        val q219 = cycle.qParams[219] ?: 100f
+        val q202 = (cycle.qParams[202] ?: 2f).coerceAtLeast(0.5f)
+        val q369 = (cycle.qParams[369] ?: 0f).coerceAtLeast(0f)
+        val q370 = (cycle.qParams[370] ?: 1.0f).coerceIn(0.2f, 1.8f)
+        val q207 = cycle.qParams[207] ?: feed
+        val q385 = cycle.qParams[385] ?: q207
+        val q200 = cycle.qParams[200] ?: 2f
+        val q204 = cycle.qParams[204] ?: 50f
+
+        val safeZ = q227 + q200
+        val retractZ = max(safeZ, q227 + q204)
+        val targetRoughZ = q386 + q369
+
+        val overhang = effectiveRadius + 2.0f
+        val xMin = q225 - overhang
+        val xMax = q225 + q218 + overhang
+        val yMin = q226 + effectiveRadius * 0.5f
+        val yMax = q226 + q219 - effectiveRadius * 0.5f
+        val stepOver = (2f * effectiveRadius * q370 * 0.7f).coerceAtLeast(1.0f)
+
+        fun addMove(p1: Point3D, p2: Point3D, type: MoveType, f: Float) {
+            if (p1.distanceTo(p2) > 1e-4f) {
+                segments.add(
+                    ToolpathSegment.Linear(
+                        lineNumber = callLine,
+                        start = p1,
+                        end = p2,
+                        moveType = type,
+                        feedRate = f,
+                        spindleSpeed = speed,
+                        toolNumber = tool.number,
+                        toolName = tool.name,
+                        toolRadius = tool.radius,
+                        effectiveRadius = effectiveRadius,
+                        dl = dl,
+                        dr = dr,
+                        toolGeometry = tool.geometryType,
+                        pointAngleDeg = tool.pointAngleDeg
+                    )
+                )
+            }
+        }
+
+        var curToolPos = Point3D(cx, cy, cz)
+        val pAppr = Point3D(xMin, yMin, retractZ)
+        addMove(curToolPos, pAppr, MoveType.RAPID, 99999f)
+        curToolPos = pAppr
+
+        var curZ = q227 - q202
+        while (true) {
+            val cutZ = max(targetRoughZ, curZ)
+            val pPlunge = Point3D(xMin, yMin, cutZ)
+            addMove(curToolPos, Point3D(xMin, yMin, safeZ), MoveType.RAPID, 99999f)
+            addMove(Point3D(xMin, yMin, safeZ), pPlunge, MoveType.PLUNGE, q207)
+            curToolPos = pPlunge
+
+            var curY = yMin
+            var pass = 0
+            while (curY <= yMax + 1e-3f || pass == 0) {
+                val xFrom = if (pass % 2 == 0 || strategy == 1) xMin else xMax
+                val xTo = if (pass % 2 == 0 || strategy == 1) xMax else xMin
+
+                if (strategy == 1 && pass > 0) {
+                    addMove(curToolPos, Point3D(curToolPos.x, curToolPos.y, safeZ), MoveType.RAPID, 99999f)
+                    addMove(Point3D(curToolPos.x, curToolPos.y, safeZ), Point3D(xFrom, curY, safeZ), MoveType.RAPID, 99999f)
+                    addMove(Point3D(xFrom, curY, safeZ), Point3D(xFrom, curY, cutZ), MoveType.PLUNGE, q207)
+                } else if (pass > 0) {
+                    addMove(curToolPos, Point3D(xFrom, curY, cutZ), MoveType.FEED, q207)
+                }
+
+                val pEndSweep = Point3D(xTo, curY, cutZ)
+                addMove(Point3D(xFrom, curY, cutZ), pEndSweep, MoveType.FEED, q207)
+                curToolPos = pEndSweep
+
+                if (curY >= yMax - 1e-3f) break
+                curY = min(yMax, curY + stepOver)
+                pass++
+            }
+
+            if (cutZ <= targetRoughZ + 1e-3f) break
+            curZ -= q202
+        }
+
+        if (q369 > 0.001f) {
+            val finishZ = q386
+            addMove(curToolPos, Point3D(xMin, yMin, safeZ), MoveType.RAPID, 99999f)
+            addMove(Point3D(xMin, yMin, safeZ), Point3D(xMin, yMin, finishZ), MoveType.PLUNGE, q385)
+            curToolPos = Point3D(xMin, yMin, finishZ)
+
+            var curY = yMin
+            var pass = 0
+            while (curY <= yMax + 1e-3f || pass == 0) {
+                val xFrom = if (pass % 2 == 0) xMin else xMax
+                val xTo = if (pass % 2 == 0) xMax else xMin
+                if (pass > 0) addMove(curToolPos, Point3D(xFrom, curY, finishZ), MoveType.FEED, q385)
+                val pEndSweep = Point3D(xTo, curY, finishZ)
+                addMove(Point3D(xFrom, curY, finishZ), pEndSweep, MoveType.FEED, q385)
+                curToolPos = pEndSweep
+                if (curY >= yMax - 1e-3f) break
+                curY = min(yMax, curY + stepOver)
+                pass++
+            }
+        }
+
+        val finalRetract = Point3D(curToolPos.x, curToolPos.y, retractZ)
+        addMove(curToolPos, finalRetract, MoveType.RAPID, 99999f)
+        return retractZ
+    }
+
+    private fun extractContourPolygon(
+        labelId: String,
+        blocks: List<KlartextBlock>,
+        labelMapByName: Map<String, Int>,
+        labelMapByNumber: Map<Int, Int>,
+        qParams: Map<Int, Float>
+    ): List<Point2D> {
+        val cleanName = labelId.lowercase(Locale.ROOT).removeSurrounding("\"").trim()
+        val num = cleanName.toIntOrNull()
+        val startIdx = (if (num != null) labelMapByNumber[num] else null) ?: labelMapByName[cleanName]
+        if (startIdx == null || startIdx < 0 || startIdx >= blocks.size) return emptyList()
+
+        val points = mutableListOf<Point2D>()
+        var curX = 0f
+        var curY = 0f
+        var ccX = 0f
+        var ccY = 0f
+
+        fun resolveCoordLocal(raw: String?, staticVal: Float?): Float? {
+            if (raw != null) {
+                if (raw.contains("Q", ignoreCase = true)) {
+                    return QExpressionEvaluator.evaluate(raw, qParams)
+                } else if (staticVal == null) {
+                    return raw.toFloatOrNull()
+                }
+            }
+            return staticVal
+        }
+
+        for (k in (startIdx + 1) until blocks.size) {
+            when (val b = blocks[k]) {
+                is KlartextBlock.LabelSet -> {
+                    if (b.labelNumber == 0 || b.labelName == "0") break
+                }
+                is KlartextBlock.CircleCenter -> {
+                    val rx = resolveCoordLocal(b.rawX, b.x)
+                    val ry = resolveCoordLocal(b.rawY, b.y)
+                    ccX = if (b.isIncrementalX || b.isIncremental) curX + (rx ?: 0f) else (rx ?: curX)
+                    ccY = if (b.isIncrementalY || b.isIncremental) curY + (ry ?: 0f) else (ry ?: curY)
+                }
+                is KlartextBlock.Linear -> {
+                    val rx = resolveCoordLocal(b.rawX, b.x)
+                    val ry = resolveCoordLocal(b.rawY, b.y)
+                    curX = if (b.isIncrementalX) curX + (rx ?: 0f) else (rx ?: curX)
+                    curY = if (b.isIncrementalY) curY + (ry ?: 0f) else (ry ?: curY)
+                    points.add(Point2D(curX, curY))
+                }
+                is KlartextBlock.Circle -> {
+                    val rx = resolveCoordLocal(b.rawX, b.x)
+                    val ry = resolveCoordLocal(b.rawY, b.y)
+                    val endX = if (b.isIncrementalX) curX + (rx ?: 0f) else (rx ?: curX)
+                    val endY = if (b.isIncrementalY) curY + (ry ?: 0f) else (ry ?: curY)
+                    val startAngle = atan2(curY - ccY, curX - ccX)
+                    var endAngle = atan2(endY - ccY, endX - ccX)
+                    if (b.direction == Direction.CCW && endAngle <= startAngle) endAngle += (2.0 * Math.PI).toFloat()
+                    if (b.direction == Direction.CW && endAngle >= startAngle) endAngle -= (2.0 * Math.PI).toFloat()
+                    val r = hypot(curX - ccX, curY - ccY)
+                    val steps = 8
+                    for (s in 1..steps) {
+                        val a = startAngle + (endAngle - startAngle) * (s.toFloat() / steps)
+                        points.add(Point2D(ccX + r * cos(a), ccY + r * sin(a)))
+                    }
+                    curX = endX
+                    curY = endY
+                }
+                is KlartextBlock.CircleRadius -> {
+                    val rx = resolveCoordLocal(b.rawX, b.x)
+                    val ry = resolveCoordLocal(b.rawY, b.y)
+                    val endX = if (b.isIncrementalX) curX + (rx ?: 0f) else (rx ?: curX)
+                    val endY = if (b.isIncrementalY) curY + (ry ?: 0f) else (ry ?: curY)
+                    val c = calculateArcCenter(Point2D(curX, curY), Point2D(endX, endY), b.radius, b.direction == Direction.CW)
+                    val startAngle = atan2(curY - c.y, curX - c.x)
+                    var endAngle = atan2(endY - c.y, endX - c.x)
+                    if (b.direction == Direction.CCW && endAngle <= startAngle) endAngle += (2.0 * Math.PI).toFloat()
+                    if (b.direction == Direction.CW && endAngle >= startAngle) endAngle -= (2.0 * Math.PI).toFloat()
+                    val steps = 8
+                    for (s in 1..steps) {
+                        val a = startAngle + (endAngle - startAngle) * (s.toFloat() / steps)
+                        points.add(Point2D(c.x + b.radius * cos(a), c.y + b.radius * sin(a)))
+                    }
+                    curX = endX
+                    curY = endY
+                }
+                is KlartextBlock.EndPgm -> break
+                else -> Unit
+            }
+        }
+        return points
+    }
+
+    private fun isPointInPolygon(pt: Point2D, poly: List<Point2D>): Boolean {
+        var inside = false
+        val n = poly.size
+        if (n < 3) return false
+        var j = n - 1
+        for (i in 0 until n) {
+            val pi = poly[i]
+            val pj = poly[j]
+            if (((pi.y > pt.y) != (pj.y > pt.y)) &&
+                (pt.x < (pj.x - pi.x) * (pt.y - pi.y) / ((pj.y - pi.y).takeIf { it != 0f } ?: 1e-5f) + pi.x)
+            ) {
+                inside = !inside
+            }
+            j = i
+        }
+        return inside
+    }
+
+    private fun distToSegment(p: Point2D, a: Point2D, b: Point2D): Float {
+        val l2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)
+        if (l2 < 1e-6f) return hypot(p.x - a.x, p.y - a.y)
+        val t = (((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2).coerceIn(0f, 1f)
+        val projX = a.x + t * (b.x - a.x)
+        val projY = a.y + t * (b.y - a.y)
+        return hypot(p.x - projX, p.y - projY)
+    }
+
+    private fun distToPolygonBoundary(pt: Point2D, poly: List<Point2D>): Float {
+        if (poly.isEmpty()) return Float.MAX_VALUE
+        var minDist = Float.MAX_VALUE
+        val n = poly.size
+        for (i in 0 until n) {
+            val j = (i + 1) % n
+            val d = distToSegment(pt, poly[i], poly[j])
+            if (d < minDist) minDist = d
+        }
+        return minDist
+    }
+
+    private fun executeSlRoughing22(
+        cycle22: KlartextBlock.CycleDef,
+        cycle20: KlartextBlock.CycleDef?,
+        slLabels: List<String>,
+        blocks: List<KlartextBlock>,
+        labelMapByName: Map<String, Int>,
+        labelMapByNumber: Map<Int, Int>,
+        qParams: Map<Int, Float>,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumZ: Float,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>,
+        diagnostics: MutableList<TncDiagnostic>
+    ): Float {
+        if (slLabels.isEmpty()) {
+            diagnostics.add(
+                TncDiagnostic(
+                    lineNumber = callLine,
+                    code = TncErrorCode.SL_CONTOUR_NOT_FOUND,
+                    severity = DiagnosticSeverity.ERROR,
+                    title = "Geen SL-contouren gedefinieerd",
+                    message = "CYCL 22 aangeroepen op regel $callLine zonder voorafgaande CYCL DEF 14.1 KONTURLABEL!"
+                )
+            )
+            return cz
+        }
+
+        val pocketPoly = extractContourPolygon(slLabels[0], blocks, labelMapByName, labelMapByNumber, qParams)
+        if (pocketPoly.size < 3) {
+            diagnostics.add(
+                TncDiagnostic(
+                    lineNumber = callLine,
+                    code = TncErrorCode.SL_CONTOUR_NOT_FOUND,
+                    severity = DiagnosticSeverity.ERROR,
+                    title = "Kamercontour niet gevonden",
+                    message = "Subcontour LBL '${slLabels[0]}' voor CYCL 22 bevat geen geldige gesloten polygoon!"
+                )
+            )
+            return cz
+        }
+
+        val islandPolys = mutableListOf<List<Point2D>>()
+        for (i in 1 until slLabels.size) {
+            val iPoly = extractContourPolygon(slLabels[i], blocks, labelMapByName, labelMapByNumber, qParams)
+            if (iPoly.size >= 3) islandPolys.add(iPoly)
+        }
+
+        val q1 = (cycle20?.qParams?.get(1) ?: -10f) + datumZ
+        val q2 = cycle20?.qParams?.get(2) ?: 1.0f
+        val q3 = (cycle20?.qParams?.get(3) ?: 0.5f).coerceAtLeast(0f)
+        val q4 = (cycle20?.qParams?.get(4) ?: 0.1f).coerceAtLeast(0f)
+        val q5 = (cycle20?.qParams?.get(5) ?: 0f) + datumZ
+        val q6 = cycle20?.qParams?.get(6) ?: 2f
+        val q7 = (cycle20?.qParams?.get(7) ?: 50f) + datumZ
+        val q10 = (cycle22.qParams[10] ?: 5f).coerceAtLeast(0.5f)
+        val q11 = cycle22.qParams[11] ?: (feed * 0.5f)
+        val q12 = cycle22.qParams[12] ?: feed
+
+        val safeZ = q5 + q6
+        val retractZ = max(safeZ, q7)
+        val targetRoughZ = q1 + q4
+
+        val margin = effectiveRadius + q3
+        val minX = pocketPoly.minOf { it.x }
+        val maxX = pocketPoly.maxOf { it.x }
+        val minY = pocketPoly.minOf { it.y }
+        val maxY = pocketPoly.maxOf { it.y }
+        val stepOver = (2f * effectiveRadius * q2 * 0.65f).coerceAtLeast(1.0f)
+
+        fun isClearPoint(pt: Point2D): Boolean {
+            if (!isPointInPolygon(pt, pocketPoly)) return false
+            if (distToPolygonBoundary(pt, pocketPoly) < margin - 1e-3f) return false
+            for (island in islandPolys) {
+                if (isPointInPolygon(pt, island)) return false
+                if (distToPolygonBoundary(pt, island) < margin - 1e-3f) return false
+            }
+            return true
+        }
+
+        fun addMove(p1: Point3D, p2: Point3D, type: MoveType, f: Float) {
+            if (p1.distanceTo(p2) > 1e-4f) {
+                segments.add(
+                    ToolpathSegment.Linear(
+                        lineNumber = callLine,
+                        start = p1,
+                        end = p2,
+                        moveType = type,
+                        feedRate = f,
+                        spindleSpeed = speed,
+                        toolNumber = tool.number,
+                        toolName = tool.name,
+                        toolRadius = tool.radius,
+                        effectiveRadius = effectiveRadius,
+                        dl = dl,
+                        dr = dr,
+                        toolGeometry = tool.geometryType,
+                        pointAngleDeg = tool.pointAngleDeg
+                    )
+                )
+            }
+        }
+
+        var curToolPos = Point3D(cx, cy, cz)
+        addMove(curToolPos, Point3D(cx, cy, retractZ), MoveType.RAPID, 99999f)
+        curToolPos = Point3D(cx, cy, retractZ)
+
+        var curZLevel = q5 - q10
+        while (true) {
+            val cutZ = max(targetRoughZ, curZLevel)
+
+            var y = minY + margin
+            var passCount = 0
+            while (y <= maxY - margin + 1e-3f) {
+                val intervals = mutableListOf<Pair<Float, Float>>()
+                var inCut = false
+                var startX = 0f
+                val dxStep = 1.0f
+                var x = minX + margin
+                while (x <= maxX - margin) {
+                    val pt = Point2D(x, y)
+                    val clear = isClearPoint(pt)
+                    if (clear && !inCut) {
+                        inCut = true
+                        startX = x
+                    } else if (!clear && inCut) {
+                        inCut = false
+                        intervals.add(Pair(startX, x - dxStep))
+                    }
+                    x += dxStep
+                }
+                if (inCut) intervals.add(Pair(startX, maxX - margin))
+
+                for (inter in intervals) {
+                    val pStart = Point3D(inter.first, y, cutZ)
+                    val pEnd = Point3D(inter.second, y, cutZ)
+                    if (pStart.distanceTo(pEnd) > 0.5f) {
+                        if (curToolPos.z < safeZ && hypot(curToolPos.x - pStart.x, curToolPos.y - pStart.y) > stepOver * 1.5f) {
+                            addMove(curToolPos, Point3D(curToolPos.x, curToolPos.y, safeZ), MoveType.RAPID, 99999f)
+                            addMove(Point3D(curToolPos.x, curToolPos.y, safeZ), Point3D(pStart.x, pStart.y, safeZ), MoveType.RAPID, 99999f)
+                            addMove(Point3D(pStart.x, pStart.y, safeZ), pStart, MoveType.PLUNGE, q11)
+                        } else {
+                            addMove(curToolPos, pStart, MoveType.FEED, q12)
+                        }
+                        addMove(pStart, pEnd, MoveType.FEED, q12)
+                        curToolPos = pEnd
+                    }
+                }
+
+                if (y >= maxY - margin - 1e-3f) break
+                y = min(maxY - margin, y + stepOver)
+                passCount++
+            }
+
+            if (cutZ <= targetRoughZ + 1e-3f) break
+            curZLevel -= q10
+        }
+
+        val finalRetract = Point3D(curToolPos.x, curToolPos.y, retractZ)
+        addMove(curToolPos, finalRetract, MoveType.RAPID, 99999f)
+        return retractZ
+    }
+
+    private fun executeSlSideFinishing24(
+        cycle24: KlartextBlock.CycleDef,
+        cycle20: KlartextBlock.CycleDef?,
+        slLabels: List<String>,
+        blocks: List<KlartextBlock>,
+        labelMapByName: Map<String, Int>,
+        labelMapByNumber: Map<Int, Int>,
+        qParams: Map<Int, Float>,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumZ: Float,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>,
+        diagnostics: MutableList<TncDiagnostic>
+    ): Float {
+        if (slLabels.isEmpty()) return cz
+        val pocketPoly = extractContourPolygon(slLabels[0], blocks, labelMapByName, labelMapByNumber, qParams)
+        if (pocketPoly.size < 3) return cz
+
+        val islandPolys = mutableListOf<List<Point2D>>()
+        for (i in 1 until slLabels.size) {
+            val iPoly = extractContourPolygon(slLabels[i], blocks, labelMapByName, labelMapByNumber, qParams)
+            if (iPoly.size >= 3) islandPolys.add(iPoly)
+        }
+
+        val q1 = (cycle20?.qParams?.get(1) ?: -10f) + datumZ
+        val q5 = (cycle20?.qParams?.get(5) ?: 0f) + datumZ
+        val q6 = cycle20?.qParams?.get(6) ?: 2f
+        val q7 = (cycle20?.qParams?.get(7) ?: 50f) + datumZ
+        val q11 = cycle24.qParams[11] ?: (feed * 0.5f)
+        val q12 = cycle24.qParams[12] ?: feed
+        val q14 = (cycle24.qParams[14] ?: 0f).coerceAtLeast(0f)
+
+        val safeZ = q5 + q6
+        val retractZ = max(safeZ, q7)
+        val targetZ = q1
+
+        fun addMove(p1: Point3D, p2: Point3D, type: MoveType, f: Float) {
+            if (p1.distanceTo(p2) > 1e-4f) {
+                segments.add(
+                    ToolpathSegment.Linear(
+                        lineNumber = callLine,
+                        start = p1,
+                        end = p2,
+                        moveType = type,
+                        feedRate = f,
+                        spindleSpeed = speed,
+                        toolNumber = tool.number,
+                        toolName = tool.name,
+                        toolRadius = tool.radius,
+                        effectiveRadius = effectiveRadius,
+                        dl = dl,
+                        dr = dr,
+                        toolGeometry = tool.geometryType,
+                        pointAngleDeg = tool.pointAngleDeg
+                    )
+                )
+            }
+        }
+
+        var curPos = Point3D(cx, cy, cz)
+
+        val pocketOffset = (effectiveRadius + q14)
+        val pCenter = Point2D(pocketPoly.map { it.x }.average().toFloat(), pocketPoly.map { it.y }.average().toFloat())
+        val offsetPocket = pocketPoly.map { pt ->
+            val v = (pCenter - pt).normalized()
+            pt + v * pocketOffset
+        }
+
+        if (offsetPocket.isNotEmpty()) {
+            val startPt = offsetPocket.first()
+            addMove(curPos, Point3D(startPt.x, startPt.y, safeZ), MoveType.RAPID, 99999f)
+            addMove(Point3D(startPt.x, startPt.y, safeZ), Point3D(startPt.x, startPt.y, targetZ), MoveType.PLUNGE, q11)
+            var prev = Point3D(startPt.x, startPt.y, targetZ)
+            for (pt in offsetPocket.drop(1)) {
+                val next = Point3D(pt.x, pt.y, targetZ)
+                addMove(prev, next, MoveType.FEED, q12)
+                prev = next
+            }
+            addMove(prev, Point3D(startPt.x, startPt.y, targetZ), MoveType.FEED, q12)
+            curPos = Point3D(startPt.x, startPt.y, targetZ)
+        }
+
+        for (island in islandPolys) {
+            val iCenter = Point2D(island.map { it.x }.average().toFloat(), island.map { it.y }.average().toFloat())
+            val offsetIsland = island.map { pt ->
+                val v = (pt - iCenter).normalized()
+                pt + v * pocketOffset
+            }
+            if (offsetIsland.isNotEmpty()) {
+                val startPt = offsetIsland.first()
+                addMove(curPos, Point3D(startPt.x, startPt.y, safeZ), MoveType.RAPID, 99999f)
+                addMove(Point3D(startPt.x, startPt.y, safeZ), Point3D(startPt.x, startPt.y, targetZ), MoveType.PLUNGE, q11)
+                var prev = Point3D(startPt.x, startPt.y, targetZ)
+                for (pt in offsetIsland.drop(1)) {
+                    val next = Point3D(pt.x, pt.y, targetZ)
+                    addMove(prev, next, MoveType.FEED, q12)
+                    prev = next
+                }
+                addMove(prev, Point3D(startPt.x, startPt.y, targetZ), MoveType.FEED, q12)
+                curPos = Point3D(startPt.x, startPt.y, targetZ)
+            }
+        }
+
+        addMove(curPos, Point3D(curPos.x, curPos.y, retractZ), MoveType.RAPID, 99999f)
+        return retractZ
+    }
+
+    private fun executeSlFloorFinishing23(
+        cycle23: KlartextBlock.CycleDef,
+        cycle20: KlartextBlock.CycleDef?,
+        slLabels: List<String>,
+        blocks: List<KlartextBlock>,
+        labelMapByName: Map<String, Int>,
+        labelMapByNumber: Map<Int, Int>,
+        qParams: Map<Int, Float>,
+        callLine: Int,
+        cx: Float,
+        cy: Float,
+        cz: Float,
+        datumZ: Float,
+        tool: TncTool,
+        effectiveRadius: Float,
+        dl: Float,
+        dr: Float,
+        feed: Float,
+        speed: Float,
+        segments: MutableList<ToolpathSegment>,
+        diagnostics: MutableList<TncDiagnostic>
+    ): Float {
+        val tempCycle22 = KlartextBlock.CycleDef(
+            lineNumber = callLine,
+            rawText = cycle23.rawText,
+            cycleNumber = 22,
+            cycleName = "AUSRAEUMEN_BODEM",
+            qParams = mapOf(10 to 999f, 11 to (cycle23.qParams[11] ?: feed * 0.5f), 12 to (cycle23.qParams[12] ?: feed))
+        )
+        val tempCycle20 = cycle20?.copy(qParams = cycle20.qParams + (4 to 0f))
+        return executeSlRoughing22(
+            tempCycle22, tempCycle20, slLabels, blocks, labelMapByName, labelMapByNumber, qParams,
+            callLine, cx, cy, cz, datumZ, tool, effectiveRadius, dl, dr, feed, speed, segments, diagnostics
+        )
     }
 
     private fun formatNum(v: Float): String =
