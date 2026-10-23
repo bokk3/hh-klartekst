@@ -150,4 +150,94 @@ class KlartextParserTest {
         }
         assertTrue("Material should be removed below top stock", minZFound < 0f)
     }
+
+    @Test
+    fun testDxfParsingAndConversion() {
+        val sampleDxf = """
+            0
+            SECTION
+            2
+            ENTITIES
+            0
+            LINE
+            10
+            0.0
+            20
+            0.0
+            11
+            100.0
+            20
+            0.0
+            0
+            LINE
+            10
+            100.0
+            20
+            0.0
+            11
+            100.0
+            20
+            50.0
+            0
+            ENDSEC
+            0
+            EOF
+        """.trimIndent()
+
+        val entities = com.klartext.simulator.parser.DxfParser.parse(sampleDxf)
+        assertEquals(2, entities.size)
+
+        val config = com.klartext.simulator.parser.DxfToKlartextConverter.ConversionConfig(
+            programName = "CAD_TEST",
+            toolName = "FREES16",
+            cuttingDepth = -15f
+        )
+        val klartext = com.klartext.simulator.parser.DxfToKlartextConverter.convert(entities, config)
+        assertTrue(klartext.contains("BEGIN PGM CAD_TEST MM"))
+        assertTrue(klartext.contains("TOOL CALL \"FREES16\""))
+        assertTrue(klartext.contains("APPR LCT"))
+        assertTrue(klartext.contains("DEP LCT"))
+
+        // Verify the generated Klartekst parses and executes cleanly
+        val blocks = KlartextParser.parseProgram(klartext)
+        val result = KlartextInterpreter().interpret(blocks)
+        assertTrue(result.segments.isNotEmpty())
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+    }
+
+    @Test
+    fun testIsoGCodeToKlartextAndBack() {
+        val isoInput = """
+            %
+            O1001 (TEST ISO)
+            T2 M06
+            S3000 M03
+            G00 G90 X0.0 Y0.0 Z10.0
+            G01 Z-5.0 F300
+            G41 X50.0 Y0.0 F800
+            G03 X50.0 Y50.0 R25.0
+            G40 X0.0 Y0.0
+            G00 Z100.0 M05
+            M30
+            %
+        """.trimIndent()
+
+        val klartext = com.klartext.simulator.parser.IsoGCodeConverter.convertIsoToKlartext(isoInput, "FROM_ISO")
+        assertTrue(klartext.contains("BEGIN PGM FROM_ISO MM"))
+        assertTrue(klartext.contains("TOOL CALL 2 Z"))
+        assertTrue(klartext.contains("RL"))
+        assertTrue(klartext.contains("CR X+50.000 Y+50.000 R+25.000 DR+"))
+
+        // Verify generated Klartekst executes cleanly
+        val blocks = KlartextParser.parseProgram(klartext)
+        val result = KlartextInterpreter().interpret(blocks)
+        assertTrue(result.segments.isNotEmpty())
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+
+        // Convert back to ISO
+        val isoOutput = com.klartext.simulator.parser.IsoGCodeConverter.convertKlartextToIso(klartext)
+        assertTrue(isoOutput.contains("G01"))
+        assertTrue(isoOutput.contains("G03"))
+        assertTrue(isoOutput.contains("M30"))
+    }
 }

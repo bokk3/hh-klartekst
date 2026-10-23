@@ -210,6 +210,9 @@ class SimulatorViewModel : ViewModel() {
     fun openToolTable() { _uiState.update { it.copy(showToolTableDialog = true) } }
     fun closeToolTable() { _uiState.update { it.copy(showToolTableDialog = false) } }
 
+    fun openImportExport() { _uiState.update { it.copy(showImportExportDialog = true) } }
+    fun closeImportExport() { _uiState.update { it.copy(showImportExportDialog = false) } }
+
     // --- TNC 640 Interactive Keypad Dialog Session ---
 
     fun startCommand(cmd: String) {

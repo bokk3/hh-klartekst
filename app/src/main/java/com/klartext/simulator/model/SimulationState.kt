@@ -87,5 +87,6 @@ data class SimulationUiState(
     val activeDialog: ActiveDialogSession? = null,
     val showCalculator: Boolean = false,
     val showDiagnosticsSheet: Boolean = false,
-    val showToolTableDialog: Boolean = false
+    val showToolTableDialog: Boolean = false,
+    val showImportExportDialog: Boolean = false
 )

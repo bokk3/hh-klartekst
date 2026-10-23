@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +43,14 @@ fun SimulatorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.openImportExport() }) {
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            contentDescription = "DXF & ISO Import/Export",
+                            tint = CncAccentOrange,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                     IconButton(onClick = { viewModel.openToolTable() }) {
                         Icon(
                             Icons.Default.Build,
@@ -157,6 +166,7 @@ fun SimulatorScreen(
                 onOpenCalculator = { viewModel.openCalculator() },
                 onOpenDiagnostics = { viewModel.openDiagnostics() },
                 onOpenToolTable = { viewModel.openToolTable() },
+                onOpenImportExport = { viewModel.openImportExport() },
                 onCopyLine = { viewModel.copyCurrentLine() },
                 onPasteLine = { viewModel.pasteLine() },
                 onDeleteLine = { viewModel.deleteCurrentLine() },
@@ -180,5 +190,14 @@ fun SimulatorScreen(
 
     if (uiState.showToolTableDialog) {
         ToolTableDialog(onDismiss = { viewModel.closeToolTable() })
+    }
+
+    if (uiState.showImportExportDialog) {
+        ImportExportDialog(
+            currentKlartext = uiState.rawCode,
+            currentProgramName = uiState.programName,
+            onLoadConvertedProgram = { name, code -> viewModel.loadProgram(name, code) },
+            onDismiss = { viewModel.closeImportExport() }
+        )
     }
 }

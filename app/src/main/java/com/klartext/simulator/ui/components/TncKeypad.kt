@@ -29,6 +29,7 @@ fun TncKeypad(
     onOpenCalculator: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenToolTable: () -> Unit,
+    onOpenImportExport: () -> Unit,
     onCopyLine: () -> Unit,
     onPasteLine: () -> Unit,
     onDeleteLine: () -> Unit,
@@ -175,6 +176,7 @@ fun TncKeypad(
             SoftkeyButton("DEL REGEL", Modifier.weight(1f)) { onDeleteLine() }
             SoftkeyButton("TOOLS", Modifier.weight(1f)) { onOpenToolTable() }
             SoftkeyButton("CALC", Modifier.weight(1f)) { onOpenCalculator() }
+            SoftkeyButton("DXF/ISO", Modifier.weight(1.1f)) { onOpenImportExport() }
             SoftkeyButton(
                 if (diagnosticsCount > 0) "FOUTEN ($diagnosticsCount)" else "MELDINGEN",
                 Modifier.weight(1.3f),
