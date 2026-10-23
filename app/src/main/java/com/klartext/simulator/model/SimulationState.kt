@@ -73,6 +73,11 @@ data class ActiveDialogSession(
     val currentStep: DialogStep? get() = steps.getOrNull(currentStepIndex)
 }
 
+enum class ConsoleTheme {
+    CLASSIC_TNC640,  // Traditional Industrial HEIDENHAIN TE 640 (light metallic grey casing, ivory numpad, green ENT, red NO ENT)
+    HYPERMODERN      // Dark Slate / Cyber CNC (ultra-modern dark mode)
+}
+
 data class SimulationUiState(
     val programName: String = "CONTOURFREZEN_V4.H",
     val rawCode: String = "",
@@ -107,5 +112,6 @@ data class SimulationUiState(
     val spindleOverride: Int = 100,
     val isConsoleTwinScreen: Boolean? = null,
     val isSingleBlockActive: Boolean = false,
-    val machinePreset: MachinePreset = MachinePreset.DMU_50
+    val machinePreset: MachinePreset = MachinePreset.DMU_50,
+    val consoleTheme: ConsoleTheme = ConsoleTheme.CLASSIC_TNC640
 )

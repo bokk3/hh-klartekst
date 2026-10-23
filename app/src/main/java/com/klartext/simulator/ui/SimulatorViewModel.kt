@@ -227,6 +227,21 @@ class SimulatorViewModel : ViewModel() {
         }
     }
 
+    fun setConsoleTheme(theme: ConsoleTheme) {
+        _uiState.update { it.copy(consoleTheme = theme) }
+    }
+
+    fun toggleConsoleTheme() {
+        _uiState.update {
+            val nextTheme = if (it.consoleTheme == ConsoleTheme.CLASSIC_TNC640) {
+                ConsoleTheme.HYPERMODERN
+            } else {
+                ConsoleTheme.CLASSIC_TNC640
+            }
+            it.copy(consoleTheme = nextTheme)
+        }
+    }
+
     fun ncStart() {
         if (_uiState.value.isSingleBlockActive) {
             stepForward()

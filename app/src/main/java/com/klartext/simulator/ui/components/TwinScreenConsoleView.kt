@@ -30,6 +30,7 @@ fun TwinScreenConsoleView(
     onToggleContour: () -> Unit,
     onToggleSectionPlane: () -> Unit,
     onToggleToolHolder: () -> Unit,
+    onToggleConsoleTheme: () -> Unit,
     onFeedOverrideChange: (Int) -> Unit,
     onSpindleOverrideChange: (Int) -> Unit,
     onNcStart: () -> Unit,
@@ -53,6 +54,8 @@ fun TwinScreenConsoleView(
     onDeleteLine: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = getConsoleColors(uiState.consoleTheme)
+
     Row(
         modifier = modifier
             .fillMaxSize()
@@ -160,20 +163,21 @@ fun TwinScreenConsoleView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF141A20), RoundedCornerShape(6.dp))
-                    .border(1.dp, Color(0xFF263238), RoundedCornerShape(6.dp))
+                    .background(colors.casingBackground, RoundedCornerShape(6.dp))
+                    .border(1.dp, colors.casingBorder, RoundedCornerShape(6.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                TwinSoftkey("KOPIEER", Modifier.weight(1f)) { onCopyLine() }
-                TwinSoftkey("PLAK", Modifier.weight(1f)) { onPasteLine() }
-                TwinSoftkey("DEL", Modifier.weight(0.9f)) { onDeleteLine() }
-                TwinSoftkey("TOOLS", Modifier.weight(1f)) { onOpenToolTable() }
-                TwinSoftkey("CALC", Modifier.weight(0.9f)) { onOpenCalculator() }
-                TwinSoftkey("Q-PAR", Modifier.weight(1f)) { onOpenQParams() }
-                TwinSoftkey("DXF/ISO", Modifier.weight(1.1f)) { onOpenImportExport() }
+                TwinSoftkey("KOPIEER", colors, Modifier.weight(1f)) { onCopyLine() }
+                TwinSoftkey("PLAK", colors, Modifier.weight(1f)) { onPasteLine() }
+                TwinSoftkey("DEL", colors, Modifier.weight(0.9f)) { onDeleteLine() }
+                TwinSoftkey("TOOLS", colors, Modifier.weight(1f)) { onOpenToolTable() }
+                TwinSoftkey("CALC", colors, Modifier.weight(0.9f)) { onOpenCalculator() }
+                TwinSoftkey("Q-PAR", colors, Modifier.weight(1f)) { onOpenQParams() }
+                TwinSoftkey("DXF/ISO", colors, Modifier.weight(1.1f)) { onOpenImportExport() }
                 TwinSoftkey(
                     if (uiState.diagnostics.isNotEmpty()) "FOUTEN (${uiState.diagnostics.size})" else "STATUS",
+                    colors,
                     Modifier.weight(1.2f),
                     isAlert = uiState.diagnostics.isNotEmpty()
                 ) { onOpenDiagnostics() }
@@ -187,6 +191,8 @@ fun TwinScreenConsoleView(
             spindleOverride = uiState.spindleOverride,
             isPlaying = uiState.isPlaying,
             isSingleBlockActive = uiState.isSingleBlockActive,
+            consoleTheme = uiState.consoleTheme,
+            onToggleConsoleTheme = onToggleConsoleTheme,
             onFeedOverrideChange = onFeedOverrideChange,
             onSpindleOverrideChange = onSpindleOverrideChange,
             onNcStart = onNcStart,
@@ -210,6 +216,7 @@ fun TwinScreenConsoleView(
 @Composable
 private fun TwinSoftkey(
     text: String,
+    colors: ConsoleColors,
     modifier: Modifier = Modifier,
     isAlert: Boolean = false,
     onClick: () -> Unit
@@ -217,16 +224,18 @@ private fun TwinSoftkey(
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isAlert) CncRapidOrange else Color(0xFF1E2830)
+            containerColor = if (isAlert) CncRapidOrange else colors.softkeyBackground
         ),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 1.dp),
         shape = RoundedCornerShape(3.dp),
-        modifier = modifier.height(26.dp)
+        modifier = modifier
+            .height(26.dp)
+            .border(0.8.dp, if (isAlert) CncRapidOrange else colors.softkeyBorder, RoundedCornerShape(3.dp))
     ) {
         Text(
             text = text,
             fontSize = 9.sp,
-            color = if (isAlert) Color.White else CncTextPrimary,
+            color = if (isAlert) Color.White else colors.softkeyText,
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )

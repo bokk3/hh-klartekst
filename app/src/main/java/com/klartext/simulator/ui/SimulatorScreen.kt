@@ -4,19 +4,17 @@ import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.Dvr
-import androidx.compose.material.icons.filled.ViewSidebar
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.klartext.simulator.model.*
 import com.klartext.simulator.sample.SamplePrograms
 import com.klartext.simulator.ui.components.*
 import com.klartext.simulator.ui.theme.*
@@ -46,13 +44,21 @@ fun SimulatorScreen(
                             color = CncAccentOrange
                         )
                         Text(
-                            text = "${uiState.programName} ${if (isTwinScreen) "[CONSOLE TWIN-SCREEN]" else "[COMPACT]"}",
+                            text = "${uiState.programName} ${if (isTwinScreen) "[CONSOLE TWIN-SCREEN]" else "[COMPACT]"} • ${if (uiState.consoleTheme == ConsoleTheme.CLASSIC_TNC640) "KLASSIEK" else "HYPERMODERN"}",
                             fontSize = 10.sp,
                             color = CncTextSecondary
                         )
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleConsoleTheme() }) {
+                        Icon(
+                            Icons.Default.Palette,
+                            contentDescription = "Schakel Console Thema (Klassiek / Hypermodern)",
+                            tint = if (uiState.consoleTheme == ConsoleTheme.CLASSIC_TNC640) Color(0xFFFF9100) else Color(0xFF00E5FF),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                     IconButton(onClick = { viewModel.toggleConsoleTwinScreen() }) {
                         Icon(
                             if (isTwinScreen) Icons.Default.ViewSidebar else Icons.Default.Dvr,
@@ -130,6 +136,7 @@ fun SimulatorScreen(
                     onToggleContour = { viewModel.toggleProgrammedContour() },
                     onToggleSectionPlane = { viewModel.toggleSectionPlane() },
                     onToggleToolHolder = { viewModel.toggleToolHolder() },
+                    onToggleConsoleTheme = { viewModel.toggleConsoleTheme() },
                     onFeedOverrideChange = { ov -> viewModel.setFeedOverride(ov) },
                     onSpindleOverrideChange = { ov -> viewModel.setSpindleOverride(ov) },
                     onNcStart = { viewModel.ncStart() },
@@ -217,6 +224,7 @@ fun SimulatorScreen(
                     TncKeypad(
                         activeDialog = uiState.activeDialog,
                         diagnosticsCount = uiState.diagnostics.size,
+                        consoleTheme = uiState.consoleTheme,
                         onStartCommand = { cmd -> viewModel.startCommand(cmd) },
                         onDialogChar = { ch -> viewModel.onDialogChar(ch) },
                         onDialogEnt = { viewModel.onDialogEnt() },

@@ -34,6 +34,7 @@ fun RotaryOverrideDial(
     valuePercent: Int,
     onValueChange: (Int) -> Unit,
     accentColor: Color = CncAccentOrange,
+    colors: ConsoleColors? = null,
     modifier: Modifier = Modifier
 ) {
     // 0% -> -135 deg, 100% -> +45 deg, 150% -> +135 deg
@@ -42,10 +43,18 @@ fun RotaryOverrideDial(
     val sweepTotalDeg = 270f
     val currentAngleDeg = startAngleDeg + (valuePercent.coerceIn(0, 150) / 150f) * sweepTotalDeg
 
+    val cardBg = colors?.dialCardBackground ?: CncSurfaceDark
+    val cardBorderColor = colors?.dialCardBorder ?: CncBorder
+    val titleCol = colors?.dialTitleColor ?: CncTextSecondary
+    val trackCol = colors?.dialTrackColor ?: Color(0xFF2C3942)
+    val knobGradColors = colors?.dialKnobColors ?: listOf(Color(0xFF37474F), Color(0xFF1E2830), Color(0xFF10171D))
+    val needleCol = colors?.dialPointerColor ?: accentColor
+    val tickCol = colors?.dialTickColor ?: Color(0xFF78909C)
+
     Column(
         modifier = modifier
-            .background(CncSurfaceDark, RoundedCornerShape(8.dp))
-            .border(1.dp, CncBorder, RoundedCornerShape(8.dp))
+            .background(cardBg, RoundedCornerShape(8.dp))
+            .border(1.dp, cardBorderColor, RoundedCornerShape(8.dp))
             .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -60,7 +69,7 @@ fun RotaryOverrideDial(
                 text = title,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = CncTextSecondary
+                color = titleCol
             )
             Text(
                 text = "$valuePercent%",
@@ -101,7 +110,7 @@ fun RotaryOverrideDial(
 
                 // Outer bezel scale arc
                 drawArc(
-                    color = Color(0xFF2C3942),
+                    color = trackCol,
                     startAngle = 135f,
                     sweepAngle = 270f,
                     useCenter = false,
@@ -126,24 +135,23 @@ fun RotaryOverrideDial(
                 val tickPcts = listOf(0, 20, 40, 60, 80, 100, 120, 140, 150)
                 tickPcts.forEach { tickPct ->
                     val tAngle = (startAngleDeg + (tickPct / 150f) * sweepTotalDeg) * (PI.toFloat() / 180f)
-                    // Offset by 90 deg so -135 is bottom-left
                     val rad = tAngle + (PI.toFloat() / 2f)
                     val is100 = tickPct == 100
                     val tickLen = if (is100) 7.dp.toPx() else 4.dp.toPx()
                     val p1 = Offset(center.x + (radius + 2f) * cos(rad), center.y + (radius + 2f) * sin(rad))
                     val p2 = Offset(center.x + (radius + 2f + tickLen) * cos(rad), center.y + (radius + 2f + tickLen) * sin(rad))
                     drawLine(
-                        color = if (is100) CncDroGreen else Color(0xFF78909C),
+                        color = if (is100) CncDroGreen else tickCol,
                         start = p1,
                         end = p2,
                         strokeWidth = if (is100) 2.5.dp.toPx() else 1.2.dp.toPx()
                     )
                 }
 
-                // Inner Knob Body (dark metallic circular gradient)
+                // Inner Knob Body
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFF37474F), Color(0xFF1E2830), Color(0xFF10171D)),
+                        colors = knobGradColors,
                         center = center,
                         radius = innerRadius
                     ),
@@ -153,7 +161,7 @@ fun RotaryOverrideDial(
 
                 // Bezel ring around knob
                 drawCircle(
-                    color = Color(0xFF546E7A),
+                    color = cardBorderColor,
                     radius = innerRadius,
                     center = center,
                     style = Stroke(width = 1.5.dp.toPx())
@@ -164,7 +172,7 @@ fun RotaryOverrideDial(
                 val pStart = Offset(center.x + innerRadius * 0.25f * cos(pointerRad), center.y + innerRadius * 0.25f * sin(pointerRad))
                 val pEnd = Offset(center.x + innerRadius * 0.95f * cos(pointerRad), center.y + innerRadius * 0.95f * sin(pointerRad))
                 drawLine(
-                    color = accentColor,
+                    color = needleCol,
                     start = pStart,
                     end = pEnd,
                     strokeWidth = 3.dp.toPx(),
@@ -173,12 +181,12 @@ fun RotaryOverrideDial(
 
                 // Center screw cap
                 drawCircle(
-                    color = Color(0xFF263238),
+                    color = knobGradColors.last(),
                     radius = innerRadius * 0.25f,
                     center = center
                 )
                 drawCircle(
-                    color = Color(0xFF78909C),
+                    color = cardBorderColor,
                     radius = innerRadius * 0.25f,
                     center = center,
                     style = Stroke(width = 1.dp.toPx())
@@ -192,16 +200,17 @@ fun RotaryOverrideDial(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SmallPillButton("-10") {
+            SmallPillButton("-10", colors = colors) {
                 onValueChange((valuePercent - 10).coerceIn(0, 150))
             }
             SmallPillButton(
                 "100%",
-                isHighlight = valuePercent == 100
+                isHighlight = valuePercent == 100,
+                colors = colors
             ) {
                 onValueChange(100)
             }
-            SmallPillButton("+10") {
+            SmallPillButton("+10", colors = colors) {
                 onValueChange((valuePercent + 10).coerceIn(0, 150))
             }
         }
@@ -212,12 +221,16 @@ fun RotaryOverrideDial(
 private fun SmallPillButton(
     text: String,
     isHighlight: Boolean = false,
+    colors: ConsoleColors? = null,
     onClick: () -> Unit
 ) {
+    val pillBg = if (isHighlight) Color(0xFF1B5E20) else (colors?.dialPillBackground ?: Color(0xFF263238))
+    val pillTxt = if (isHighlight) CncDroGreen else (colors?.dialPillText ?: CncTextPrimary)
+
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isHighlight) Color(0xFF1B5E20) else Color(0xFF263238)
+            containerColor = pillBg
         ),
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
         shape = RoundedCornerShape(3.dp),
@@ -229,7 +242,7 @@ private fun SmallPillButton(
             text = text,
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isHighlight) CncDroGreen else CncTextPrimary
+            color = pillTxt
         )
     }
 }

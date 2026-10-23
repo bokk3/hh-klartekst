@@ -14,12 +14,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.klartext.simulator.model.ActiveDialogSession
+import com.klartext.simulator.model.ConsoleTheme
 import com.klartext.simulator.ui.theme.*
 
 @Composable
 fun TncKeypad(
     activeDialog: ActiveDialogSession?,
     diagnosticsCount: Int,
+    consoleTheme: ConsoleTheme = ConsoleTheme.CLASSIC_TNC640,
     onStartCommand: (String) -> Unit,
     onDialogChar: (String) -> Unit,
     onDialogEnt: () -> Unit,
@@ -36,10 +38,12 @@ fun TncKeypad(
     onDeleteLine: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = getConsoleColors(consoleTheme)
+
     Column(
         modifier = modifier
-            .background(CncPanelBackground, RoundedCornerShape(8.dp))
-            .border(1.dp, CncBorder, RoundedCornerShape(8.dp))
+            .background(colors.casingBackground, RoundedCornerShape(8.dp))
+            .border(1.dp, colors.casingBorder, RoundedCornerShape(8.dp))
             .padding(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -96,7 +100,13 @@ fun TncKeypad(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 listOf("7", "8", "9", "+", "DEL").forEach { key ->
-                    KeypadButton(key, modifier = Modifier.weight(1f)) {
+                    KeypadButton(
+                        label = key,
+                        containerColor = if (key == "DEL") colors.deleteKeyBackground else colors.numpadKeyBackground,
+                        textColor = if (key == "DEL") colors.deleteKeyText else colors.numpadKeyText,
+                        borderColor = colors.numpadKeyBorder,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         if (key == "DEL") onDialogDel() else onDialogChar(key)
                     }
                 }
@@ -106,7 +116,13 @@ fun TncKeypad(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 listOf("4", "5", "6", "-", "END").forEach { key ->
-                    KeypadButton(key, modifier = Modifier.weight(1f)) {
+                    KeypadButton(
+                        label = key,
+                        containerColor = if (key == "END") colors.cycleKeyBackground else colors.numpadKeyBackground,
+                        textColor = if (key == "END") Color.White else colors.numpadKeyText,
+                        borderColor = colors.numpadKeyBorder,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         if (key == "END") onDialogEnd() else onDialogChar(key)
                     }
                 }
@@ -116,7 +132,13 @@ fun TncKeypad(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 listOf("1", "2", "3", "0", ".").forEach { key ->
-                    KeypadButton(key, modifier = Modifier.weight(1f)) { onDialogChar(key) }
+                    KeypadButton(
+                        label = key,
+                        containerColor = colors.numpadKeyBackground,
+                        textColor = colors.numpadKeyText,
+                        borderColor = colors.numpadKeyBorder,
+                        modifier = Modifier.weight(1f)
+                    ) { onDialogChar(key) }
                 }
             }
             Row(
@@ -126,43 +148,53 @@ fun TncKeypad(
                 // NO ENT button (Crucial for TNC 640 modal RL/RR preservation!)
                 Button(
                     onClick = onDialogNoEnt,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.noEntKeyBackground),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("NO ENT", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("NO ENT", color = colors.noEntKeyText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
                 // ENT button
                 Button(
                     onClick = onDialogEnt,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.entKeyBackground),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("ENT", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("ENT", color = colors.entKeyText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         } else {
-            // TNC Programming Keys Row 1
+            // TNC Programming Keys Row 1 (Contour keys - L, CC, C, CR, CT, RND, CHF)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 listOf("L", "CC", "C", "CR", "CT", "RND", "CHF").forEach { cmd ->
-                    TncCmdButton(cmd, modifier = Modifier.weight(1f)) { onStartCommand(cmd) }
+                    TncCmdButton(
+                        label = cmd,
+                        containerColor = colors.contourKeyBackground,
+                        textColor = colors.contourKeyText,
+                        modifier = Modifier.weight(1f)
+                    ) { onStartCommand(cmd) }
                 }
             }
 
-            // TNC Programming Keys Row 2
+            // TNC Programming Keys Row 2 (Cycle & Tool keys)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 listOf("APPR", "DEP", "TOOL CALL", "CYCL DEF", "LBL SET", "CALL LBL").forEach { cmd ->
-                    TncCmdButton(cmd, modifier = Modifier.weight(1f)) { onStartCommand(cmd) }
+                    TncCmdButton(
+                        label = cmd,
+                        containerColor = colors.cycleKeyBackground,
+                        textColor = colors.cycleKeyText,
+                        modifier = Modifier.weight(1f)
+                    ) { onStartCommand(cmd) }
                 }
             }
         }
@@ -172,15 +204,16 @@ fun TncKeypad(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            SoftkeyButton("KOPIËER", Modifier.weight(1f)) { onCopyLine() }
-            SoftkeyButton("PLAK", Modifier.weight(1f)) { onPasteLine() }
-            SoftkeyButton("DEL REGEL", Modifier.weight(1f)) { onDeleteLine() }
-            SoftkeyButton("TOOLS", Modifier.weight(1f)) { onOpenToolTable() }
-            SoftkeyButton("CALC", Modifier.weight(1f)) { onOpenCalculator() }
-            SoftkeyButton("Q-PAR", Modifier.weight(1f)) { onOpenQParams() }
-            SoftkeyButton("DXF/ISO", Modifier.weight(1.1f)) { onOpenImportExport() }
+            SoftkeyButton("KOPIËER", colors, Modifier.weight(1f)) { onCopyLine() }
+            SoftkeyButton("PLAK", colors, Modifier.weight(1f)) { onPasteLine() }
+            SoftkeyButton("DEL REGEL", colors, Modifier.weight(1f)) { onDeleteLine() }
+            SoftkeyButton("TOOLS", colors, Modifier.weight(1f)) { onOpenToolTable() }
+            SoftkeyButton("CALC", colors, Modifier.weight(1f)) { onOpenCalculator() }
+            SoftkeyButton("Q-PAR", colors, Modifier.weight(1f)) { onOpenQParams() }
+            SoftkeyButton("DXF/ISO", colors, Modifier.weight(1.1f)) { onOpenImportExport() }
             SoftkeyButton(
                 if (diagnosticsCount > 0) "FOUTEN ($diagnosticsCount)" else "MELDINGEN",
+                colors,
                 Modifier.weight(1.3f),
                 isAlert = diagnosticsCount > 0
             ) { onOpenDiagnostics() }
@@ -191,20 +224,25 @@ fun TncKeypad(
 @Composable
 private fun KeypadButton(
     label: String,
+    containerColor: Color,
+    textColor: Color,
+    borderColor: Color? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = CncSurfaceDark),
+        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         shape = RoundedCornerShape(4.dp),
-        modifier = modifier.height(30.dp)
+        modifier = modifier
+            .height(30.dp)
+            .then(if (borderColor != null) Modifier.border(0.8.dp, borderColor, RoundedCornerShape(4.dp)) else Modifier)
     ) {
         Text(
             text = label,
             fontSize = 11.sp,
-            color = CncTextPrimary,
+            color = textColor,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace
         )
@@ -214,12 +252,14 @@ private fun KeypadButton(
 @Composable
 private fun TncCmdButton(
     label: String,
+    containerColor: Color,
+    textColor: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238)),
+        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         shape = RoundedCornerShape(4.dp),
         modifier = modifier.height(32.dp)
@@ -227,7 +267,7 @@ private fun TncCmdButton(
         Text(
             text = label,
             fontSize = 10.sp,
-            color = CncAccentOrange,
+            color = textColor,
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
@@ -237,6 +277,7 @@ private fun TncCmdButton(
 @Composable
 private fun SoftkeyButton(
     label: String,
+    colors: ConsoleColors,
     modifier: Modifier = Modifier,
     isAlert: Boolean = false,
     onClick: () -> Unit
@@ -244,16 +285,18 @@ private fun SoftkeyButton(
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isAlert) CncRapidOrange else Color(0xFF1E2830)
+            containerColor = if (isAlert) CncRapidOrange else colors.softkeyBackground
         ),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         shape = RoundedCornerShape(3.dp),
-        modifier = modifier.height(28.dp)
+        modifier = modifier
+            .height(28.dp)
+            .border(0.8.dp, if (isAlert) CncRapidOrange else colors.softkeyBorder, RoundedCornerShape(3.dp))
     ) {
         Text(
             text = label,
             fontSize = 9.sp,
-            color = if (isAlert) Color.White else CncTextPrimary,
+            color = if (isAlert) Color.White else colors.softkeyText,
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
