@@ -1,15 +1,19 @@
 package com.klartext.simulator.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Dvr
+import androidx.compose.material.icons.filled.ViewSidebar
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.klartext.simulator.sample.SamplePrograms
@@ -25,6 +29,11 @@ fun SimulatorScreen(
     val uiState by viewModel.uiState.collectAsState()
     var programMenuExpanded by remember { mutableStateOf(false) }
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screenWidthDp = configuration.screenWidthDp
+    val isTwinScreen = uiState.isConsoleTwinScreen ?: (isLandscape || screenWidthDp >= 640)
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -36,13 +45,21 @@ fun SimulatorScreen(
                             color = CncAccentOrange
                         )
                         Text(
-                            text = uiState.programName,
+                            text = "${uiState.programName} ${if (isTwinScreen) "[CONSOLE TWIN-SCREEN]" else "[COMPACT]"}",
                             fontSize = 10.sp,
                             color = CncTextSecondary
                         )
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleConsoleTwinScreen() }) {
+                        Icon(
+                            if (isTwinScreen) Icons.Default.ViewSidebar else Icons.Default.Dvr,
+                            contentDescription = "Schakel Twin-Screen Console Modus",
+                            tint = if (isTwinScreen) CncDroGreen else CncAccentOrange,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                     IconButton(onClick = { viewModel.openImportExport() }) {
                         Icon(
                             Icons.Default.SwapHoriz,
@@ -99,82 +116,123 @@ fun SimulatorScreen(
         },
         containerColor = CncDarkBackground
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // 1. Digital Readout (DRO) & Warning Alerts
-            DigitalReadout(
-                state = uiState.machineState,
-                diagnostics = uiState.diagnostics,
-                onOpenDiagnostics = { viewModel.openDiagnostics() },
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isTwinScreen) {
+                TwinScreenConsoleView(
+                    uiState = uiState,
+                    onLineClick = { line -> viewModel.seekToLine(line) },
+                    onViewModeChange = { mode -> viewModel.setViewMode(mode) },
+                    onToggleContour = { viewModel.toggleProgrammedContour() },
+                    onToggleSectionPlane = { viewModel.toggleSectionPlane() },
+                    onToggleToolHolder = { viewModel.toggleToolHolder() },
+                    onFeedOverrideChange = { ov -> viewModel.setFeedOverride(ov) },
+                    onSpindleOverrideChange = { ov -> viewModel.setSpindleOverride(ov) },
+                    onNcStart = { viewModel.ncStart() },
+                    onNcStop = { viewModel.ncStop() },
+                    onToggleSingleBlock = { viewModel.toggleSingleBlock() },
+                    onReset = { viewModel.reset() },
+                    onStartCommand = { cmd -> viewModel.startCommand(cmd) },
+                    onDialogChar = { ch -> viewModel.onDialogChar(ch) },
+                    onDialogEnt = { viewModel.onDialogEnt() },
+                    onDialogNoEnt = { viewModel.onDialogNoEnt() },
+                    onDialogDel = { viewModel.onDialogDel() },
+                    onDialogEnd = { viewModel.onDialogEnd() },
+                    onNavigateLine = { delta -> viewModel.navigateCodeLine(delta) },
+                    onOpenCalculator = { viewModel.openCalculator() },
+                    onOpenDiagnostics = { viewModel.openDiagnostics() },
+                    onOpenToolTable = { viewModel.openToolTable() },
+                    onOpenQParams = { viewModel.openQParamDialog() },
+                    onOpenImportExport = { viewModel.openImportExport() },
+                    onCopyLine = { viewModel.copyCurrentLine() },
+                    onPasteLine = { viewModel.pasteLine() },
+                    onDeleteLine = { viewModel.deleteCurrentLine() }
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // 1. Digital Readout (DRO) & Warning Alerts
+                    DigitalReadout(
+                        state = uiState.machineState,
+                        diagnostics = uiState.diagnostics,
+                        onOpenDiagnostics = { viewModel.openDiagnostics() },
+                        feedOverride = uiState.feedOverride,
+                        spindleOverride = uiState.spindleOverride,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-            // 2. Simulation Canvas (2D Dual path & 2.5D material removal, 3D Orbit, Section Cut)
-            SimulationCanvas(
-                state = uiState,
-                currentStepIndex = uiState.machineState.currentStepIndex,
-                onToggleSectionPlane = { viewModel.toggleSectionPlane() },
-                onToggleToolHolder = { viewModel.toggleToolHolder() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.3f)
-            )
+                    // 2. Simulation Canvas (2D Dual path & 2.5D material removal, 3D Orbit, Section Cut)
+                    SimulationCanvas(
+                        state = uiState,
+                        currentStepIndex = uiState.machineState.currentStepIndex,
+                        onToggleSectionPlane = { viewModel.toggleSectionPlane() },
+                        onToggleToolHolder = { viewModel.toggleToolHolder() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.3f)
+                    )
 
-            // 3. Klartext Code Viewer (TNC blue selection bar + syntax highlighting)
-            CodeViewer(
-                blocks = uiState.blocks,
-                activeLineNumber = uiState.machineState.activeLineNumber,
-                diagnostics = uiState.diagnostics,
-                onLineClick = { line -> viewModel.seekToLine(line) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.9f)
-            )
+                    // 3. Klartext Code Viewer (TNC blue selection bar + syntax highlighting)
+                    CodeViewer(
+                        blocks = uiState.blocks,
+                        activeLineNumber = uiState.machineState.activeLineNumber,
+                        diagnostics = uiState.diagnostics,
+                        onLineClick = { line -> viewModel.seekToLine(line) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(0.9f)
+                    )
 
-            // 4. Control Panel (Play, Pause, Single-Block step, scrub slider, speed, view switcher)
-            ControlPanel(
-                isPlaying = uiState.isPlaying,
-                currentStep = uiState.machineState.currentStepIndex,
-                totalSteps = uiState.segments.size,
-                playbackSpeed = uiState.playbackSpeed,
-                viewMode = uiState.viewMode,
-                showContour = uiState.showProgrammedContour,
-                onPlayPause = { viewModel.togglePlayPause() },
-                onStepForward = { viewModel.stepForward() },
-                onStepBack = { viewModel.stepBackward() },
-                onReset = { viewModel.reset() },
-                onSeek = { step -> viewModel.seekToStep(step) },
-                onSpeedChange = { spd -> viewModel.setPlaybackSpeed(spd) },
-                onViewModeChange = { mode -> viewModel.setViewMode(mode) },
-                onToggleContour = { viewModel.toggleProgrammedContour() },
-                modifier = Modifier.fillMaxWidth()
-            )
+                    // 4. Control Panel (Play, Pause, Single-Block step, scrub slider, speed, view switcher)
+                    ControlPanel(
+                        isPlaying = uiState.isPlaying,
+                        currentStep = uiState.machineState.currentStepIndex,
+                        totalSteps = uiState.segments.size,
+                        playbackSpeed = uiState.playbackSpeed,
+                        viewMode = uiState.viewMode,
+                        showContour = uiState.showProgrammedContour,
+                        onPlayPause = { viewModel.togglePlayPause() },
+                        onStepForward = { viewModel.stepForward() },
+                        onStepBack = { viewModel.stepBackward() },
+                        onReset = { viewModel.reset() },
+                        onSeek = { step -> viewModel.seekToStep(step) },
+                        onSpeedChange = { spd -> viewModel.setPlaybackSpeed(spd) },
+                        onViewModeChange = { mode -> viewModel.setViewMode(mode) },
+                        onToggleContour = { viewModel.toggleProgrammedContour() },
+                        isSingleBlockActive = uiState.isSingleBlockActive,
+                        onToggleSingleBlock = { viewModel.toggleSingleBlock() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-            // 5. TNC 640 Keypad & Interactive Dialog Session (ENT / NO ENT buttons + softkeys)
-            TncKeypad(
-                activeDialog = uiState.activeDialog,
-                diagnosticsCount = uiState.diagnostics.size,
-                onStartCommand = { cmd -> viewModel.startCommand(cmd) },
-                onDialogChar = { ch -> viewModel.onDialogChar(ch) },
-                onDialogEnt = { viewModel.onDialogEnt() },
-                onDialogNoEnt = { viewModel.onDialogNoEnt() },
-                onDialogDel = { viewModel.onDialogDel() },
-                onDialogEnd = { viewModel.onDialogEnd() },
-                onOpenCalculator = { viewModel.openCalculator() },
-                onOpenDiagnostics = { viewModel.openDiagnostics() },
-                onOpenToolTable = { viewModel.openToolTable() },
-                onOpenQParams = { viewModel.openQParamDialog() },
-                onOpenImportExport = { viewModel.openImportExport() },
-                onCopyLine = { viewModel.copyCurrentLine() },
-                onPasteLine = { viewModel.pasteLine() },
-                onDeleteLine = { viewModel.deleteCurrentLine() },
-                modifier = Modifier.fillMaxWidth()
-            )
+                    // 5. TNC 640 Keypad & Interactive Dialog Session (ENT / NO ENT buttons + softkeys)
+                    TncKeypad(
+                        activeDialog = uiState.activeDialog,
+                        diagnosticsCount = uiState.diagnostics.size,
+                        onStartCommand = { cmd -> viewModel.startCommand(cmd) },
+                        onDialogChar = { ch -> viewModel.onDialogChar(ch) },
+                        onDialogEnt = { viewModel.onDialogEnt() },
+                        onDialogNoEnt = { viewModel.onDialogNoEnt() },
+                        onDialogDel = { viewModel.onDialogDel() },
+                        onDialogEnd = { viewModel.onDialogEnd() },
+                        onOpenCalculator = { viewModel.openCalculator() },
+                        onOpenDiagnostics = { viewModel.openDiagnostics() },
+                        onOpenToolTable = { viewModel.openToolTable() },
+                        onOpenQParams = { viewModel.openQParamDialog() },
+                        onOpenImportExport = { viewModel.openImportExport() },
+                        onCopyLine = { viewModel.copyCurrentLine() },
+                        onPasteLine = { viewModel.pasteLine() },
+                        onDeleteLine = { viewModel.deleteCurrentLine() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 

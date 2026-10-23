@@ -31,6 +31,8 @@ fun ControlPanel(
     onSpeedChange: (Float) -> Unit,
     onViewModeChange: (ViewMode) -> Unit,
     onToggleContour: () -> Unit,
+    isSingleBlockActive: Boolean = false,
+    onToggleSingleBlock: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -69,7 +71,10 @@ fun ControlPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Playback buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(onClick = onReset, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.Replay, contentDescription = "Reset", tint = CncTextPrimary, modifier = Modifier.size(18.dp))
                 }
@@ -90,6 +95,22 @@ fun ControlPanel(
                 }
                 IconButton(onClick = onStepForward, enabled = currentStep < totalSteps, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.SkipNext, contentDescription = "Stap Vooruit", tint = CncTextPrimary, modifier = Modifier.size(18.dp))
+                }
+                Button(
+                    onClick = onToggleSingleBlock,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSingleBlockActive) Color(0xFFE65100) else CncSurfaceDark
+                    ),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text(
+                        text = "S-BLK",
+                        fontSize = 9.sp,
+                        color = if (isSingleBlockActive) Color.White else CncTextSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 

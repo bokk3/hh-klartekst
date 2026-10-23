@@ -27,6 +27,8 @@ fun DigitalReadout(
     state: MachineState,
     diagnostics: List<TncDiagnostic>,
     onOpenDiagnostics: () -> Unit,
+    feedOverride: Int = 100,
+    spindleOverride: Int = 100,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -94,15 +96,18 @@ fun DigitalReadout(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val feedSuffix = if (feedOverride == 0) " (HOLD)" else if (feedOverride != 100) " ($feedOverride%)" else ""
+            val spindleSuffix = if (spindleOverride != 100) " ($spindleOverride%)" else ""
+
             InfoTag(
                 label = "VOEDING",
-                value = if (state.isRapid) "FMAX" else String.format(Locale.US, "%.0f", state.feedRate),
-                color = if (state.isRapid) CncRapidOrange else CncFeedCyan
+                value = if (state.isRapid) "FMAX$feedSuffix" else "${String.format(Locale.US, "%.0f", state.feedRate)}$feedSuffix",
+                color = if (feedOverride == 0) CncRapidOrange else if (state.isRapid) CncRapidOrange else CncFeedCyan
             )
 
             InfoTag(
                 label = "SPIL",
-                value = if (state.spindleOn) String.format(Locale.US, "%.0f RPM", state.spindleSpeed) else "STOP",
+                value = if (state.spindleOn) "${String.format(Locale.US, "%.0f RPM", state.spindleSpeed)}$spindleSuffix" else "STOP",
                 color = if (state.spindleOn) CncDroGreen else CncTextSecondary
             )
 

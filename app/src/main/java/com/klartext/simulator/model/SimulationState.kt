@@ -102,5 +102,9 @@ data class SimulationUiState(
     val orbitPitch: Float = 35f,
     val sectionPlane: SectionPlane = SectionPlane.Y_AXIS,
     val sectionOffset: Float = 0f,
-    val showToolHolder: Boolean = true
+    val showToolHolder: Boolean = true,
+    val feedOverride: Int = 100,
+    val spindleOverride: Int = 100,
+    val isConsoleTwinScreen: Boolean? = null,
+    val isSingleBlockActive: Boolean = false
 )

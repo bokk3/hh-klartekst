@@ -103,9 +103,20 @@ class SimulatorViewModel : ViewModel() {
         playbackJob?.cancel()
         playbackJob = viewModelScope.launch {
             while (_uiState.value.isPlaying && _uiState.value.machineState.currentStepIndex < _uiState.value.segments.size) {
-                val delayMs = (400L / _uiState.value.playbackSpeed).toLong().coerceAtLeast(40L)
+                val feedOv = _uiState.value.feedOverride
+                if (feedOv <= 0) {
+                    // Feed Hold (0% override): pause motion
+                    delay(100L)
+                    continue
+                }
+                val effectiveSpeed = (_uiState.value.playbackSpeed * (feedOv / 100f)).coerceAtLeast(0.05f)
+                val delayMs = (400L / effectiveSpeed).toLong().coerceIn(20L, 2500L)
                 delay(delayMs)
                 stepForward()
+                if (_uiState.value.isSingleBlockActive) {
+                    pause()
+                    break
+                }
             }
             if (_uiState.value.machineState.currentStepIndex >= _uiState.value.segments.size) {
                 pause()
@@ -144,12 +155,14 @@ class SimulatorViewModel : ViewModel() {
 
         val updatedMachineState = if (clampedStep > 0 && clampedStep <= segments.size) {
             val currentSeg = segments[clampedStep - 1]
+            val feedOv = _uiState.value.feedOverride / 100f
+            val spinOv = _uiState.value.spindleOverride / 100f
             _uiState.value.machineState.copy(
                 x = currentSeg.end.x,
                 y = currentSeg.end.y,
                 z = currentSeg.end.z,
-                feedRate = currentSeg.feedRate,
-                spindleSpeed = currentSeg.spindleSpeed,
+                feedRate = currentSeg.feedRate * feedOv,
+                spindleSpeed = currentSeg.spindleSpeed * spinOv,
                 activeTool = currentSeg.toolNumber,
                 toolName = currentSeg.toolName,
                 toolRadius = currentSeg.toolRadius,
@@ -177,6 +190,66 @@ class SimulatorViewModel : ViewModel() {
         }
 
         updateHeightmap(clampedStep)
+    }
+
+    fun setFeedOverride(percent: Int) {
+        val clamped = percent.coerceIn(0, 150)
+        _uiState.update { it.copy(feedOverride = clamped) }
+        val step = _uiState.value.machineState.currentStepIndex
+        if (step > 0 && step <= _uiState.value.segments.size) {
+            val seg = _uiState.value.segments[step - 1]
+            _uiState.update {
+                it.copy(machineState = it.machineState.copy(feedRate = seg.feedRate * (clamped / 100f)))
+            }
+        }
+    }
+
+    fun setSpindleOverride(percent: Int) {
+        val clamped = percent.coerceIn(0, 150)
+        _uiState.update { it.copy(spindleOverride = clamped) }
+        val step = _uiState.value.machineState.currentStepIndex
+        if (step > 0 && step <= _uiState.value.segments.size) {
+            val seg = _uiState.value.segments[step - 1]
+            _uiState.update {
+                it.copy(machineState = it.machineState.copy(spindleSpeed = seg.spindleSpeed * (clamped / 100f)))
+            }
+        }
+    }
+
+    fun toggleSingleBlock() {
+        _uiState.update { it.copy(isSingleBlockActive = !it.isSingleBlockActive) }
+    }
+
+    fun toggleConsoleTwinScreen() {
+        _uiState.update {
+            val current = it.isConsoleTwinScreen ?: false
+            it.copy(isConsoleTwinScreen = !current)
+        }
+    }
+
+    fun ncStart() {
+        if (_uiState.value.isSingleBlockActive) {
+            stepForward()
+        } else {
+            play()
+        }
+    }
+
+    fun ncStop() {
+        pause()
+    }
+
+    fun navigateCodeLine(delta: Int) {
+        val currentLine = _uiState.value.machineState.activeLineNumber
+        val blockLines = _uiState.value.blocks.map { it.lineNumber }
+        if (blockLines.isEmpty()) return
+        val curIdx = blockLines.indexOf(currentLine)
+        val targetIdx = if (curIdx >= 0) {
+            (curIdx + delta).coerceIn(0, blockLines.lastIndex)
+        } else {
+            0
+        }
+        seekToLine(blockLines[targetIdx])
     }
 
     fun seekToLine(lineNumber: Int) {
