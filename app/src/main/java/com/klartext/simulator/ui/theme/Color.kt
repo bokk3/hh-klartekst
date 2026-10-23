@@ -3,12 +3,16 @@ package com.klartext.simulator.ui.theme
 import androidx.compose.ui.graphics.Color
 
 val CncDarkBackground = Color(0xFF101418)
+val CncBackground = Color(0xFF101418)
 val CncSurfaceDark = Color(0xFF1B2228)
+val CncCardBackground = Color(0xFF1B2228)
 val CncPanelBackground = Color(0xFF161C22)
 val CncBorder = Color(0xFF2C3844)
 
 val CncAccentOrange = Color(0xFFFF9100)      // Heidenhain orange/amber
+val CncAccentCyan = Color(0xFF00E5FF)        // Glowing cyan accent
 val CncFeedCyan = Color(0xFF00E5FF)          // Cutting feed moves
+val CncFeedGreen = Color(0xFF00E676)         // Green feed / active indicator
 val CncRapidOrange = Color(0xFFFF5252)       // Rapid traverse (FMAX)
 val CncPlungePurple = Color(0xFFE040FB)      // Z plunge moves
 val CncStockGrey = Color(0x3378909C)         // Blank workpiece

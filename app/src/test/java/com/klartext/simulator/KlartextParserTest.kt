@@ -467,7 +467,7 @@ class KlartextParserTest {
         assertEquals(0f, rotMove.end.x, 0.1f)
         assertEquals(50f, rotMove.end.y, 0.1f)
 
-        val mirrorMove = result.segments.first { it.lineNumber == 12 }
+        val mirrorMove = result.segments.last { it.lineNumber == 12 }
         assertEquals(-40f, mirrorMove.programmedEnd.x, 0.1f)
         assertEquals(RadiusComp.RR, mirrorMove.radiusComp)
     }
