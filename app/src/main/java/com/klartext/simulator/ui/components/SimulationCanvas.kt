@@ -3,7 +3,10 @@ package com.klartext.simulator.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -21,6 +25,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,13 +38,13 @@ import kotlin.math.*
 /**
  * Authentic HEIDENHAIN TNC 640 3D & 2.5D Simulation Canvas
  * Features:
+ * - Strict clipping: prevents 3D models and cutter paths from floating over text/code panels
+ * - Touchscreen gesture control: 1 finger orbits/rotates 3D, 2 fingers pinch-zoom and pan
+ * - Quick-view presets (ISO, XY, XZ, YZ, FIT) and on-screen orbit arrows & zoom buttons
  * - Authentic TNC 640 Color Palette (Olive stock, Terracotta face milling, Golden amber pockets, Emerald deep pockets, Cobalt bores)
- * - Free 3D Orbit Camera with 1-finger drag, pinch-zoom, and Pan mode
- * - Step-by-step 3D Solid Milled Workpiece Simulation with directional normal shading
  * - 5-Axis Machine Vise Clamping under the workpiece
  * - Dynamic Cutter Engagement & Spark Glow Indicator
  * - 3D Orientation Gizmo (X=Red, Y=Green, Z=Blue)
- * - Quick-View Presets (ISO, XY, XZ, YZ, FIT, PAN/DRAAI)
  */
 @Composable
 fun SimulationCanvas(
@@ -56,137 +61,149 @@ fun SimulationCanvas(
     var orbitPitch by remember { mutableFloatStateOf(state.orbitPitch) }
     var isPanMode by remember { mutableStateOf(false) }
 
+    val is3DView = state.viewMode == ViewMode.ORBIT_3D || state.viewMode == ViewMode.ISOMETRIC
+
     Box(
         modifier = modifier
+            .clipToBounds()
             .background(CncDarkBackground, RoundedCornerShape(8.dp))
+            .border(1.dp, CncBorder, RoundedCornerShape(8.dp))
             .pointerInput(state.viewMode, isPanMode) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(0.4f, 25f)
-                    if (state.viewMode == ViewMode.ORBIT_3D) {
-                        if (isPanMode) {
-                            offsetX += pan.x
-                            offsetY += pan.y
-                        } else {
-                            orbitYaw = (orbitYaw + pan.x * 0.45f) % 360f
-                            if (orbitYaw < 0f) orbitYaw += 360f
-                            orbitPitch = (orbitPitch - pan.y * 0.45f).coerceIn(5f, 88f)
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val downPointers = event.changes.filter { it.pressed }
+                        if (downPointers.isEmpty()) break
+
+                        if (downPointers.size == 1) {
+                            // 1 FINGER GESTURE:
+                            // In 3D: Orbit rotate (Yaw & Pitch)
+                            // In 2D or Pan mode: Pan translation (X & Y)
+                            val change = downPointers[0]
+                            val drag = change.position - change.previousPosition
+                            if (drag != Offset.Zero) {
+                                if (is3DView && !isPanMode) {
+                                    orbitYaw = (orbitYaw + drag.x * 0.45f) % 360f
+                                    if (orbitYaw < 0f) orbitYaw += 360f
+                                    orbitPitch = (orbitPitch - drag.y * 0.45f).coerceIn(5f, 88f)
+                                } else {
+                                    offsetX += drag.x
+                                    offsetY += drag.y
+                                }
+                                change.consume()
+                            }
+                        } else if (downPointers.size >= 2) {
+                            // 2 FINGERS GESTURE:
+                            // Pinch to Zoom + Two-finger Drag to Pan
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+
+                            scale = (scale * zoomChange).coerceIn(0.4f, 25f)
+                            offsetX += panChange.x
+                            offsetY += panChange.y
+
+                            event.changes.forEach { it.consume() }
                         }
-                    } else {
-                        offsetX += pan.x
-                        offsetY += pan.y
-                    }
+                    } while (event.changes.any { it.pressed })
                 }
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f + offsetX, size.height / 2f + offsetY)
+            clipRect {
+                val center = Offset(size.width / 2f + offsetX, size.height / 2f + offsetY)
 
-            // 1. Draw Grid (for 2D views)
-            if (state.showGrid && state.viewMode != ViewMode.ORBIT_3D && state.viewMode != ViewMode.SECTION_CUT) {
-                drawGrid(center, scale)
-            }
+                // 1. Draw Grid (for 2D views)
+                if (state.showGrid && state.viewMode != ViewMode.ORBIT_3D && state.viewMode != ViewMode.SECTION_CUT) {
+                    drawGrid(center, scale)
+                }
 
-            // 2. Workpiece Stock or Material Display
-            when (state.viewMode) {
-                ViewMode.MATERIAL_25D -> {
-                    if (state.heightfield != null) {
-                        drawMaterialRemoval25D(state.heightfield, center, scale)
-                    } else {
+                // 2. Workpiece Stock or Material Display
+                when (state.viewMode) {
+                    ViewMode.MATERIAL_25D -> {
+                        if (state.heightfield != null) {
+                            drawMaterialRemoval25D(state.heightfield, center, scale)
+                        } else {
+                            drawStock2D(state.stock, state.viewMode, center, scale)
+                        }
+                    }
+                    ViewMode.ISOMETRIC, ViewMode.ORBIT_3D -> {
+                        val activeYaw = if (state.viewMode == ViewMode.ISOMETRIC && orbitYaw == 0f) 45f else orbitYaw
+                        val activePitch = if (state.viewMode == ViewMode.ISOMETRIC && orbitPitch == 0f) 35f else orbitPitch
+                        if (state.heightfield != null) {
+                            drawOrbit3DMaterialRemoval(
+                                grid = state.heightfield,
+                                stock = state.stock,
+                                center = center,
+                                scale = scale,
+                                yaw = activeYaw,
+                                pitch = activePitch,
+                                toolPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z),
+                                effectiveRadius = state.machineState.effectiveRadius
+                            )
+                        } else {
+                            drawStock3D(state.stock, state.viewMode, center, scale, yaw = activeYaw, pitch = activePitch)
+                        }
+                    }
+                    ViewMode.SECTION_CUT -> {
+                        drawSectionCut(state, center, scale)
+                    }
+                    else -> {
                         drawStock2D(state.stock, state.viewMode, center, scale)
                     }
                 }
-                ViewMode.ISOMETRIC -> {
-                    if (state.heightfield != null) {
-                        drawOrbit3DMaterialRemoval(
-                            grid = state.heightfield,
-                            stock = state.stock,
-                            center = center,
-                            scale = scale,
-                            yaw = 45f,
-                            pitch = 30f,
-                            toolPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z),
-                            effectiveRadius = state.machineState.effectiveRadius
-                        )
-                    } else {
-                        drawStock3D(state.stock, state.viewMode, center, scale, yaw = 45f, pitch = 30f)
+
+                // 3. Workpiece Datum Symbol at X0 Y0
+                if (state.viewMode != ViewMode.SECTION_CUT) {
+                    drawWorkpieceDatum(state.viewMode, center, scale, orbitYaw, orbitPitch)
+                }
+
+                // 4. Programmed Contour (Yellow Dashed)
+                if (state.showProgrammedContour && state.viewMode != ViewMode.MATERIAL_25D && state.viewMode != ViewMode.SECTION_CUT) {
+                    drawProgrammedContour(state.segments, currentStepIndex, state.viewMode, center, scale, orbitYaw, orbitPitch)
+                }
+
+                // 5. Equidistant Cutter Center Path
+                if (state.viewMode != ViewMode.SECTION_CUT) {
+                    val executedCount = currentStepIndex.coerceIn(0, state.segments.size)
+                    val segmentsToDraw = state.segments.take(executedCount)
+                    for (seg in segmentsToDraw) {
+                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = true)
+                    }
+
+                    val futureSegments = state.segments.drop(executedCount)
+                    for (seg in futureSegments) {
+                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = false)
                     }
                 }
-                ViewMode.ORBIT_3D -> {
-                    if (state.heightfield != null) {
-                        drawOrbit3DMaterialRemoval(
-                            grid = state.heightfield,
-                            stock = state.stock,
-                            center = center,
-                            scale = scale,
-                            yaw = orbitYaw,
-                            pitch = orbitPitch,
-                            toolPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z),
-                            effectiveRadius = state.machineState.effectiveRadius
-                        )
-                    } else {
-                        drawStock3D(state.stock, state.viewMode, center, scale, yaw = orbitYaw, pitch = orbitPitch)
-                    }
+
+                // 6. Active Tool Assembly (Flute + HSK-A63/BT40/SK40 Holder + Engagement Spark)
+                val currentPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z)
+                val activeTool = ToolTable.defaultTools.firstOrNull { it.number == state.machineState.activeTool }
+                    ?: ToolTable.defaultTools.firstOrNull() ?: ToolTable.standardTools[2]
+
+                drawToolAssembly(
+                    pos = currentPos,
+                    tool = activeTool,
+                    effectiveRadius = state.machineState.effectiveRadius,
+                    viewMode = state.viewMode,
+                    center = center,
+                    scale = scale,
+                    yaw = orbitYaw,
+                    pitch = orbitPitch,
+                    showHolder = state.showToolHolder,
+                    stock = state.stock,
+                    isRapid = state.machineState.isRapid
+                )
+
+                // 7. 3D Orientation Gizmo (Triad in bottom-left corner)
+                if (is3DView) {
+                    drawOrientationGizmo3D(orbitYaw, orbitPitch)
                 }
-                ViewMode.SECTION_CUT -> {
-                    drawSectionCut(state, center, scale)
-                }
-                else -> {
-                    drawStock2D(state.stock, state.viewMode, center, scale)
-                }
-            }
-
-            // 3. Workpiece Datum Symbol at X0 Y0
-            if (state.viewMode != ViewMode.SECTION_CUT) {
-                drawWorkpieceDatum(state.viewMode, center, scale, orbitYaw, orbitPitch)
-            }
-
-            // 4. Programmed Contour (Yellow Dashed)
-            if (state.showProgrammedContour && state.viewMode != ViewMode.MATERIAL_25D && state.viewMode != ViewMode.SECTION_CUT) {
-                drawProgrammedContour(state.segments, currentStepIndex, state.viewMode, center, scale, orbitYaw, orbitPitch)
-            }
-
-            // 5. Equidistant Cutter Center Path
-            if (state.viewMode != ViewMode.SECTION_CUT) {
-                val executedCount = currentStepIndex.coerceIn(0, state.segments.size)
-                val segmentsToDraw = state.segments.take(executedCount)
-                for (seg in segmentsToDraw) {
-                    drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = true)
-                }
-
-                val futureSegments = state.segments.drop(executedCount)
-                for (seg in futureSegments) {
-                    drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = false)
-                }
-            }
-
-            // 6. Active Tool Assembly (Flute + HSK-A63/BT40/SK40 Holder + Engagement Spark)
-            val currentPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z)
-            val activeTool = ToolTable.defaultTools.firstOrNull { it.number == state.machineState.activeTool }
-                ?: ToolTable.defaultTools.firstOrNull() ?: ToolTable.standardTools[2]
-
-            drawToolAssembly(
-                pos = currentPos,
-                tool = activeTool,
-                effectiveRadius = state.machineState.effectiveRadius,
-                viewMode = state.viewMode,
-                center = center,
-                scale = scale,
-                yaw = orbitYaw,
-                pitch = orbitPitch,
-                showHolder = state.showToolHolder,
-                stock = state.stock,
-                isRapid = state.machineState.isRapid
-            )
-
-            // 7. 3D Orientation Gizmo (Triad in bottom-left corner)
-            if (state.viewMode == ViewMode.ORBIT_3D || state.viewMode == ViewMode.ISOMETRIC) {
-                val effectiveYaw = if (state.viewMode == ViewMode.ISOMETRIC) 45f else orbitYaw
-                val effectivePitch = if (state.viewMode == ViewMode.ISOMETRIC) 30f else orbitPitch
-                drawOrientationGizmo3D(effectiveYaw, effectivePitch)
             }
         }
 
-        // Overlay Quick-View Controls & Presets
+        // Overlay Quick-View Controls & Presets (Top-End)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -194,10 +211,10 @@ fun SimulationCanvas(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.End
         ) {
-            if (state.viewMode == ViewMode.ORBIT_3D) {
+            if (is3DView) {
                 // Angle badge & Quick presets row
                 Surface(
-                    color = CncPanelBackground.copy(alpha = 0.90f),
+                    color = CncPanelBackground.copy(alpha = 0.92f),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.border(0.5.dp, CncAccentCyan, RoundedCornerShape(4.dp))
                 ) {
@@ -266,6 +283,76 @@ fun SimulationCanvas(
                     )
                 }
             }
+        }
+
+        // On-screen Zoom & Orbit Controls (Bottom-End)
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            if (is3DView) {
+                // Mini 3D Orbit D-Pad
+                Surface(
+                    color = CncPanelBackground.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.border(0.5.dp, CncBorder, RoundedCornerShape(4.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CanvasPresetBtn("◀") { orbitYaw = (orbitYaw - 15f + 360f) % 360f }
+                        CanvasPresetBtn("▲") { orbitPitch = (orbitPitch + 10f).coerceIn(5f, 88f) }
+                        CanvasPresetBtn("▼") { orbitPitch = (orbitPitch - 10f).coerceIn(5f, 88f) }
+                        CanvasPresetBtn("▶") { orbitYaw = (orbitYaw + 15f) % 360f }
+                    }
+                }
+            }
+
+            // Zoom Buttons (+ / - / Reset)
+            Surface(
+                color = CncPanelBackground.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.border(0.5.dp, CncBorder, RoundedCornerShape(4.dp))
+            ) {
+                Row(
+                    modifier = Modifier.padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CanvasPresetBtn("+") { scale = (scale * 1.25f).coerceIn(0.4f, 25f) }
+                    CanvasPresetBtn("-") { scale = (scale / 1.25f).coerceIn(0.4f, 25f) }
+                    CanvasPresetBtn("⟲") {
+                        offsetX = 0f
+                        offsetY = 0f
+                        scale = 2.2f
+                        if (is3DView) {
+                            orbitYaw = 45f
+                            orbitPitch = 35f
+                        }
+                    }
+                }
+            }
+        }
+
+        // Touchscreen Gesture Hint Banner (Bottom-Start)
+        Surface(
+            color = CncDarkBackground.copy(alpha = 0.75f),
+            shape = RoundedCornerShape(4.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp)
+        ) {
+            Text(
+                text = if (is3DView) "🖐 1 Vinger: Draaien | ✌️ 2 Vingers: Zoomen & Pan" else "🖐 1 Vinger: Verschuiven | ✌️ 2 Vingers: Zoomen",
+                color = CncTextSecondary,
+                fontSize = 8.sp,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
         }
     }
 }

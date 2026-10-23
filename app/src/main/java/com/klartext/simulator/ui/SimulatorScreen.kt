@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -177,6 +178,7 @@ fun SimulatorScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1.3f)
+                            .clipToBounds()
                     )
 
                     // 3. Klartext Code Viewer (TNC blue selection bar + syntax highlighting)
