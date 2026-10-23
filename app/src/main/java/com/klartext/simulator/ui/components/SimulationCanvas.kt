@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +47,19 @@ import kotlin.math.*
  * - Dynamic Cutter Engagement & Spark Glow Indicator
  * - 3D Orientation Gizmo (X=Red, Y=Green, Z=Blue)
  */
+enum class RotationLockMode(val label: String) {
+    AUTO_3AXIS("AUTO"),
+    LOCK_Z("Z-AS"),
+    LOCK_X("X-AS"),
+    LOCK_Y("Y-AS")
+}
+
+enum class ActiveSwipeAxis(val label: String, val color: Color) {
+    AXIS_Z_YAW("Z-AS (YAW)", Color(0xFF00E5FF)),
+    AXIS_X_PITCH("X-AS (PITCH)", Color(0xFFFF9800)),
+    AXIS_Y_ROLL("Y-AS (ROLL)", Color(0xFFE040FB))
+}
+
 @Composable
 fun SimulationCanvas(
     state: SimulationUiState,
@@ -59,7 +73,10 @@ fun SimulationCanvas(
     var offsetY by remember { mutableFloatStateOf(0f) }
     var orbitYaw by remember { mutableFloatStateOf(state.orbitYaw) }
     var orbitPitch by remember { mutableFloatStateOf(state.orbitPitch) }
+    var orbitRoll by remember { mutableFloatStateOf(state.orbitRoll) }
     var isPanMode by remember { mutableStateOf(false) }
+    var lockMode by remember { mutableStateOf(RotationLockMode.AUTO_3AXIS) }
+    var activeSwipeAxis by remember { mutableStateOf<ActiveSwipeAxis?>(null) }
 
     val is3DView = state.viewMode == ViewMode.ORBIT_3D || state.viewMode == ViewMode.ISOMETRIC
 
@@ -68,25 +85,71 @@ fun SimulationCanvas(
             .clipToBounds()
             .background(CncDarkBackground, RoundedCornerShape(8.dp))
             .border(1.dp, CncBorder, RoundedCornerShape(8.dp))
-            .pointerInput(state.viewMode, isPanMode) {
+            .pointerInput(state.viewMode, isPanMode, lockMode) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    var currentLockedAxis: ActiveSwipeAxis? = when (lockMode) {
+                        RotationLockMode.LOCK_Z -> ActiveSwipeAxis.AXIS_Z_YAW
+                        RotationLockMode.LOCK_X -> ActiveSwipeAxis.AXIS_X_PITCH
+                        RotationLockMode.LOCK_Y -> ActiveSwipeAxis.AXIS_Y_ROLL
+                        RotationLockMode.AUTO_3AXIS -> null
+                    }
+                    if (currentLockedAxis != null) {
+                        activeSwipeAxis = currentLockedAxis
+                    }
+                    var accumulated = Offset.Zero
+                    val lockThresholdPx = 10f
+
                     do {
                         val event = awaitPointerEvent()
                         val downPointers = event.changes.filter { it.pressed }
-                        if (downPointers.isEmpty()) break
+                        if (downPointers.isEmpty()) {
+                            activeSwipeAxis = null
+                            break
+                        }
 
                         if (downPointers.size == 1) {
                             // 1 FINGER GESTURE:
-                            // In 3D: Orbit rotate (Yaw & Pitch)
-                            // In 2D or Pan mode: Pan translation (X & Y)
+                            // Locked single-axis rotation in 3D (3 swipe directions: Horiz->Z, Vert->X, Diag->Y)
+                            // Or Pan translation (X & Y) in 2D / Pan mode
                             val change = downPointers[0]
                             val drag = change.position - change.previousPosition
+
                             if (drag != Offset.Zero) {
                                 if (is3DView && !isPanMode) {
-                                    orbitYaw = (orbitYaw + drag.x * 0.45f) % 360f
-                                    if (orbitYaw < 0f) orbitYaw += 360f
-                                    orbitPitch = (orbitPitch - drag.y * 0.45f).coerceIn(5f, 88f)
+                                    // 1. In AUTO mode, lock to the single swipe axis once threshold is reached
+                                    if (currentLockedAxis == null) {
+                                        accumulated += drag
+                                        if (accumulated.getDistance() >= lockThresholdPx) {
+                                            val dx = abs(accumulated.x)
+                                            val dy = abs(accumulated.y)
+                                            val angleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                            currentLockedAxis = when {
+                                                angleDeg <= 28f -> ActiveSwipeAxis.AXIS_Z_YAW     // 1. Horizontaal -> Z-as (Yaw / C)
+                                                angleDeg >= 62f -> ActiveSwipeAxis.AXIS_X_PITCH   // 2. Verticaal -> X-as (Pitch / A)
+                                                else -> ActiveSwipeAxis.AXIS_Y_ROLL               // 3. Diagonaal -> Y-as (Roll / B)
+                                            }
+                                            activeSwipeAxis = currentLockedAxis
+                                        }
+                                    }
+
+                                    // 2. Rotate ONLY along the locked single axis - zero cross-axis wobble!
+                                    when (currentLockedAxis) {
+                                        ActiveSwipeAxis.AXIS_Z_YAW -> {
+                                            orbitYaw = (orbitYaw + drag.x * 0.45f) % 360f
+                                            if (orbitYaw < 0f) orbitYaw += 360f
+                                        }
+                                        ActiveSwipeAxis.AXIS_X_PITCH -> {
+                                            orbitPitch = (orbitPitch - drag.y * 0.45f) % 360f
+                                            if (orbitPitch < 0f) orbitPitch += 360f
+                                        }
+                                        ActiveSwipeAxis.AXIS_Y_ROLL -> {
+                                            val diagDrag = (drag.x - drag.y) * 0.35f
+                                            orbitRoll = (orbitRoll + diagDrag) % 360f
+                                            if (orbitRoll < 0f) orbitRoll += 360f
+                                        }
+                                        null -> { /* Still within initial threshold */ }
+                                    }
                                 } else {
                                     offsetX += drag.x
                                     offsetY += drag.y
@@ -95,17 +158,25 @@ fun SimulationCanvas(
                             }
                         } else if (downPointers.size >= 2) {
                             // 2 FINGERS GESTURE:
-                            // Pinch to Zoom + Two-finger Drag to Pan
+                            // Pinch to Zoom + Two-finger Drag to Pan + Two-finger Twist to Roll
                             val zoomChange = event.calculateZoom()
                             val panChange = event.calculatePan()
+                            val rotationChange = event.calculateRotation()
 
                             scale = (scale * zoomChange).coerceIn(0.4f, 25f)
                             offsetX += panChange.x
                             offsetY += panChange.y
 
+                            if (is3DView && abs(rotationChange) > 0.05f) {
+                                orbitRoll = (orbitRoll + rotationChange) % 360f
+                                if (orbitRoll < 0f) orbitRoll += 360f
+                            }
+
                             event.changes.forEach { it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
+
+                    activeSwipeAxis = null
                 }
             }
     ) {
@@ -130,6 +201,7 @@ fun SimulationCanvas(
                     ViewMode.ISOMETRIC, ViewMode.ORBIT_3D -> {
                         val activeYaw = if (state.viewMode == ViewMode.ISOMETRIC && orbitYaw == 0f) 45f else orbitYaw
                         val activePitch = if (state.viewMode == ViewMode.ISOMETRIC && orbitPitch == 0f) 35f else orbitPitch
+                        val activeRoll = if (state.viewMode == ViewMode.ISOMETRIC) 0f else orbitRoll
                         if (state.heightfield != null) {
                             drawOrbit3DMaterialRemoval(
                                 grid = state.heightfield,
@@ -138,11 +210,12 @@ fun SimulationCanvas(
                                 scale = scale,
                                 yaw = activeYaw,
                                 pitch = activePitch,
+                                roll = activeRoll,
                                 toolPos = Point3D(state.machineState.x, state.machineState.y, state.machineState.z),
                                 effectiveRadius = state.machineState.effectiveRadius
                             )
                         } else {
-                            drawStock3D(state.stock, state.viewMode, center, scale, yaw = activeYaw, pitch = activePitch)
+                            drawStock3D(state.stock, state.viewMode, center, scale, yaw = activeYaw, pitch = activePitch, roll = activeRoll)
                         }
                     }
                     ViewMode.SECTION_CUT -> {
@@ -155,12 +228,12 @@ fun SimulationCanvas(
 
                 // 3. Workpiece Datum Symbol at X0 Y0
                 if (state.viewMode != ViewMode.SECTION_CUT) {
-                    drawWorkpieceDatum(state.viewMode, center, scale, orbitYaw, orbitPitch)
+                    drawWorkpieceDatum(state.viewMode, center, scale, orbitYaw, orbitPitch, orbitRoll)
                 }
 
                 // 4. Programmed Contour (Yellow Dashed)
                 if (state.showProgrammedContour && state.viewMode != ViewMode.MATERIAL_25D && state.viewMode != ViewMode.SECTION_CUT) {
-                    drawProgrammedContour(state.segments, currentStepIndex, state.viewMode, center, scale, orbitYaw, orbitPitch)
+                    drawProgrammedContour(state.segments, currentStepIndex, state.viewMode, center, scale, orbitYaw, orbitPitch, orbitRoll)
                 }
 
                 // 5. Equidistant Cutter Center Path
@@ -168,12 +241,12 @@ fun SimulationCanvas(
                     val executedCount = currentStepIndex.coerceIn(0, state.segments.size)
                     val segmentsToDraw = state.segments.take(executedCount)
                     for (seg in segmentsToDraw) {
-                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = true)
+                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, orbitRoll, isExecuted = true)
                     }
 
                     val futureSegments = state.segments.drop(executedCount)
                     for (seg in futureSegments) {
-                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, isExecuted = false)
+                        drawSegment(seg, state.viewMode, center, scale, orbitYaw, orbitPitch, orbitRoll, isExecuted = false)
                     }
                 }
 
@@ -191,6 +264,7 @@ fun SimulationCanvas(
                     scale = scale,
                     yaw = orbitYaw,
                     pitch = orbitPitch,
+                    roll = orbitRoll,
                     showHolder = state.showToolHolder,
                     stock = state.stock,
                     isRapid = state.machineState.isRapid
@@ -198,7 +272,44 @@ fun SimulationCanvas(
 
                 // 7. 3D Orientation Gizmo (Triad in bottom-left corner)
                 if (is3DView) {
-                    drawOrientationGizmo3D(orbitYaw, orbitPitch)
+                    drawOrientationGizmo3D(orbitYaw, orbitPitch, orbitRoll)
+                }
+            }
+        }
+
+        // 🔒 Locked Axis Live HUD Badge (top-start during active swipe)
+        if (is3DView && activeSwipeAxis != null) {
+            Surface(
+                color = Color(0xEE111827),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 12.dp, top = 8.dp)
+                    .border(1.dp, activeSwipeAxis!!.color, RoundedCornerShape(16.dp))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(activeSwipeAxis!!.color, CircleShape)
+                    )
+                    val angleText = when (activeSwipeAxis) {
+                        ActiveSwipeAxis.AXIS_Z_YAW -> "${orbitYaw.toInt()}°"
+                        ActiveSwipeAxis.AXIS_X_PITCH -> "${orbitPitch.toInt()}°"
+                        ActiveSwipeAxis.AXIS_Y_ROLL -> "${orbitRoll.toInt()}°"
+                        null -> ""
+                    }
+                    Text(
+                        text = "🔒 VERGRENDELD: ${activeSwipeAxis!!.label} = $angleText",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -227,7 +338,7 @@ fun SimulationCanvas(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "3D ${orbitYaw.toInt()}°/${orbitPitch.toInt()}°",
+                                text = "3D Z:${orbitYaw.toInt()}° X:${orbitPitch.toInt()}° Y:${orbitRoll.toInt()}°",
                                 color = CncAccentCyan,
                                 fontSize = 9.sp,
                                 fontFamily = FontFamily.Monospace,
@@ -252,12 +363,38 @@ fun SimulationCanvas(
                             }
                         }
 
+                        // 3-Axis Swipe Direction Lock Selector
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("AS:", fontSize = 8.sp, color = CncTextSecondary, fontWeight = FontWeight.Bold)
+                            RotationLockMode.values().forEach { mode ->
+                                Button(
+                                    onClick = { lockMode = mode },
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(18.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (lockMode == mode) CncAccentCyan else CncSurfaceDark
+                                    ),
+                                    shape = RoundedCornerShape(2.dp)
+                                ) {
+                                    Text(
+                                        text = mode.label,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (lockMode == mode) CncDarkBackground else CncTextPrimary
+                                    )
+                                }
+                            }
+                        }
+
                         // Presets: ISO, XY, XZ, YZ, FIT
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            CanvasPresetBtn("ISO") { orbitYaw = 45f; orbitPitch = 35f }
-                            CanvasPresetBtn("XY") { orbitYaw = 0f; orbitPitch = 88f }
-                            CanvasPresetBtn("XZ") { orbitYaw = 0f; orbitPitch = 10f }
-                            CanvasPresetBtn("YZ") { orbitYaw = 90f; orbitPitch = 10f }
+                            CanvasPresetBtn("ISO") { orbitYaw = 45f; orbitPitch = 35f; orbitRoll = 0f }
+                            CanvasPresetBtn("XY") { orbitYaw = 0f; orbitPitch = 90f; orbitRoll = 0f }
+                            CanvasPresetBtn("XZ") { orbitYaw = 0f; orbitPitch = 0f; orbitRoll = 0f }
+                            CanvasPresetBtn("YZ") { orbitYaw = 90f; orbitPitch = 0f; orbitRoll = 0f }
                             CanvasPresetBtn("FIT") {
                                 offsetX = 0f
                                 offsetY = 0f
@@ -285,7 +422,7 @@ fun SimulationCanvas(
             }
         }
 
-        // On-screen Zoom & Orbit Controls (Bottom-End)
+        // On-screen Zoom & 3-Axis Orbit Controls (Bottom-End)
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -294,21 +431,30 @@ fun SimulationCanvas(
             horizontalAlignment = Alignment.End
         ) {
             if (is3DView) {
-                // Mini 3D Orbit D-Pad
+                // Mini 3-Axis Orbit Stepper D-Pad
                 Surface(
-                    color = CncPanelBackground.copy(alpha = 0.85f),
+                    color = CncPanelBackground.copy(alpha = 0.88f),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.border(0.5.dp, CncBorder, RoundedCornerShape(4.dp))
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.padding(2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        horizontalAlignment = Alignment.End
                     ) {
-                        CanvasPresetBtn("◀") { orbitYaw = (orbitYaw - 15f + 360f) % 360f }
-                        CanvasPresetBtn("▲") { orbitPitch = (orbitPitch + 10f).coerceIn(5f, 88f) }
-                        CanvasPresetBtn("▼") { orbitPitch = (orbitPitch - 10f).coerceIn(5f, 88f) }
-                        CanvasPresetBtn("▶") { orbitYaw = (orbitYaw + 15f) % 360f }
+                        // Z (Yaw) & X (Pitch)
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            CanvasPresetBtn("Z◀") { orbitYaw = (orbitYaw - 15f + 360f) % 360f }
+                            CanvasPresetBtn("▲X") { orbitPitch = (orbitPitch + 15f) % 360f }
+                            CanvasPresetBtn("▼X") { orbitPitch = (orbitPitch - 15f + 360f) % 360f }
+                            CanvasPresetBtn("Z▶") { orbitYaw = (orbitYaw + 15f) % 360f }
+                        }
+                        // Y (Roll) & 0° Reset
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            CanvasPresetBtn("⤹Y") { orbitRoll = (orbitRoll - 15f + 360f) % 360f }
+                            CanvasPresetBtn("Y⤸") { orbitRoll = (orbitRoll + 15f) % 360f }
+                            CanvasPresetBtn("0°Y") { orbitRoll = 0f }
+                        }
                     }
                 }
             }
@@ -333,6 +479,7 @@ fun SimulationCanvas(
                         if (is3DView) {
                             orbitYaw = 45f
                             orbitPitch = 35f
+                            orbitRoll = 0f
                         }
                     }
                 }
@@ -348,7 +495,11 @@ fun SimulationCanvas(
                 .padding(6.dp)
         ) {
             Text(
-                text = if (is3DView) "🖐 1 Vinger: Draaien | ✌️ 2 Vingers: Zoomen & Pan" else "🖐 1 Vinger: Verschuiven | ✌️ 2 Vingers: Zoomen",
+                text = if (is3DView) {
+                    "⬌ Horiz: Z-as (Yaw) | ⬍ Vert: X-as (Pitch) | ⤢ Diag/✌️: Y-as (Roll)"
+                } else {
+                    "🖐 1 Vinger: Verschuiven | ✌️ 2 Vingers: Zoomen"
+                },
                 color = CncTextSecondary,
                 fontSize = 8.sp,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -381,7 +532,8 @@ private fun projectPoint(
     center: Offset,
     scale: Float,
     yawDeg: Float = 45f,
-    pitchDeg: Float = 35f
+    pitchDeg: Float = 35f,
+    rollDeg: Float = 0f
 ): Offset {
     return when (mode) {
         ViewMode.TOP_XY, ViewMode.MATERIAL_25D -> Offset(center.x + p.x * scale, center.y - p.y * scale)
@@ -395,19 +547,28 @@ private fun projectPoint(
         ViewMode.ORBIT_3D -> {
             val yawRad = Math.toRadians(yawDeg.toDouble())
             val pitchRad = Math.toRadians(pitchDeg.toDouble())
+            val rollRad = Math.toRadians(rollDeg.toDouble())
+
             val cosY = cos(yawRad).toFloat()
             val sinY = sin(yawRad).toFloat()
             val cosP = cos(pitchRad).toFloat()
             val sinP = sin(pitchRad).toFloat()
+            val cosR = cos(rollRad).toFloat()
+            val sinR = sin(rollRad).toFloat()
 
-            // Rotate around Z (yaw)
-            val rx = p.x * cosY - p.y * sinY
-            val ry = p.x * sinY + p.y * cosY
-            val rz = p.z
+            // 1. Rotate around Z (Yaw / C-axis)
+            val x1 = p.x * cosY - p.y * sinY
+            val y1 = p.x * sinY + p.y * cosY
+            val z1 = p.z
 
-            // Tilt around X (pitch)
-            val sx = rx
-            val sy = ry * sinP - rz * cosP
+            // 2. Rotate around Y (Roll / B-axis)
+            val x2 = x1 * cosR + z1 * sinR
+            val y2 = y1
+            val z2 = -x1 * sinR + z1 * cosR
+
+            // 3. Rotate around X (Pitch / A-axis)
+            val sx = x2
+            val sy = y2 * sinP - z2 * cosP
 
             Offset(center.x + sx * scale, center.y - sy * scale)
         }
@@ -438,9 +599,10 @@ private fun DrawScope.drawWorkpieceDatum(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
-    val datumPt = projectPoint(Point3D(0f, 0f, 0f), mode, center, scale, yaw, pitch)
+    val datumPt = projectPoint(Point3D(0f, 0f, 0f), mode, center, scale, yaw, pitch, roll)
     val r = 7f
 
     drawCircle(color = CncAccentOrange, radius = r, center = datumPt, style = Stroke(width = 1.5f))
@@ -481,7 +643,8 @@ private fun DrawScope.drawStock3D(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
     val x0 = stock.min.x; val x1 = stock.max.x
     val y0 = stock.min.y; val y1 = stock.max.y
@@ -496,7 +659,7 @@ private fun DrawScope.drawStock3D(
         Point3D(x1, y0, z1), // 5: max X, min Y, max Z (top)
         Point3D(x1, y1, z1), // 6: max X, max Y, max Z (top)
         Point3D(x0, y1, z1)  // 7: min X, max Y, max Z (top)
-    ).map { projectPoint(it, mode, center, scale, yaw, pitch) }
+    ).map { projectPoint(it, mode, center, scale, yaw, pitch, roll) }
 
     // Bottom face
     val bottomEdges = listOf(0 to 1, 1 to 2, 2 to 3, 3 to 0)
@@ -528,11 +691,12 @@ private fun DrawScope.drawOrbit3DMaterialRemoval(
     scale: Float,
     yaw: Float,
     pitch: Float,
+    roll: Float = 0f,
     toolPos: Point3D?,
     effectiveRadius: Float
 ) {
     // 1. Draw 5-Axis Machine Vise Clamping Base under stock
-    drawMachineVise3D(stock, center, scale, yaw, pitch)
+    drawMachineVise3D(stock, center, scale, yaw, pitch, roll)
 
     // 2. Traversal steps for solid quads
     val colStep = max(1, grid.cols / 36)
@@ -578,10 +742,10 @@ private fun DrawScope.drawOrbit3DMaterialRemoval(
             val zAvg = (z00 + z10 + z11 + z01) * 0.25f
 
             // Project 4 corners
-            val p00 = projectPoint(Point3D(x0, y0, z00), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-            val p10 = projectPoint(Point3D(x1, y0, z10), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-            val p11 = projectPoint(Point3D(x1, y1, z11), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-            val p01 = projectPoint(Point3D(x0, y1, z01), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+            val p00 = projectPoint(Point3D(x0, y0, z00), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+            val p10 = projectPoint(Point3D(x1, y0, z10), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+            val p11 = projectPoint(Point3D(x1, y1, z11), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+            val p01 = projectPoint(Point3D(x0, y1, z01), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
             // Authentic TNC 640 Base Color based on milled depth
             val baseColor = when {
@@ -618,10 +782,10 @@ private fun DrawScope.drawOrbit3DMaterialRemoval(
     }
 
     // 4. Draw outer boundary vertical side walls of the stock down to stockZMin
-    drawStockWalls3D(grid, stock, center, scale, yaw, pitch)
+    drawStockWalls3D(grid, stock, center, scale, yaw, pitch, roll)
 
     // 5. Workpiece outer wireframe accent for crisp technical look
-    drawStockEdges3D(stock, center, scale, yaw, pitch)
+    drawStockEdges3D(stock, center, scale, yaw, pitch, roll)
 }
 
 /**
@@ -633,7 +797,8 @@ private fun DrawScope.drawStockWalls3D(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
     val wallColorFront = Color(0xFF38463D)
     val wallColorSide = Color(0xFF2C3730)
@@ -644,7 +809,7 @@ private fun DrawScope.drawStockWalls3D(
         Point3D(stock.max.x, stock.min.y, zMin),
         Point3D(stock.max.x, stock.max.y, zMin),
         Point3D(stock.min.x, stock.max.y, zMin)
-    ).map { projectPoint(it, ViewMode.ORBIT_3D, center, scale, yaw, pitch) }
+    ).map { projectPoint(it, ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll) }
 
     // Bottom solid plate
     val bottomPath = Path().apply {
@@ -657,10 +822,10 @@ private fun DrawScope.drawStockWalls3D(
     drawPath(bottomPath, color = Color(0xFF1E2621))
 
     // Front Wall (Y = minY)
-    val frontP0 = projectPoint(Point3D(stock.min.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val frontP1 = projectPoint(Point3D(stock.max.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val frontP2 = projectPoint(Point3D(stock.max.x, stock.min.y, grid.getZ(grid.cols - 1, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val frontP3 = projectPoint(Point3D(stock.min.x, stock.min.y, grid.getZ(0, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+    val frontP0 = projectPoint(Point3D(stock.min.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val frontP1 = projectPoint(Point3D(stock.max.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val frontP2 = projectPoint(Point3D(stock.max.x, stock.min.y, grid.getZ(grid.cols - 1, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val frontP3 = projectPoint(Point3D(stock.min.x, stock.min.y, grid.getZ(0, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
     val frontWallPath = Path().apply {
         moveTo(frontP0.x, frontP0.y)
@@ -672,10 +837,10 @@ private fun DrawScope.drawStockWalls3D(
     drawPath(frontWallPath, color = wallColorFront)
 
     // Right Wall (X = maxX)
-    val rightP0 = projectPoint(Point3D(stock.max.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val rightP1 = projectPoint(Point3D(stock.max.x, stock.max.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val rightP2 = projectPoint(Point3D(stock.max.x, stock.max.y, grid.getZ(grid.cols - 1, grid.rows - 1)), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val rightP3 = projectPoint(Point3D(stock.max.x, stock.min.y, grid.getZ(grid.cols - 1, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+    val rightP0 = projectPoint(Point3D(stock.max.x, stock.min.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val rightP1 = projectPoint(Point3D(stock.max.x, stock.max.y, zMin), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val rightP2 = projectPoint(Point3D(stock.max.x, stock.max.y, grid.getZ(grid.cols - 1, grid.rows - 1)), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val rightP3 = projectPoint(Point3D(stock.max.x, stock.min.y, grid.getZ(grid.cols - 1, 0)), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
     val rightWallPath = Path().apply {
         moveTo(rightP0.x, rightP0.y)
@@ -695,7 +860,8 @@ private fun DrawScope.drawMachineVise3D(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
     val zViseTop = stock.min.z
     val zViseBottom = stock.min.z - 25f
@@ -706,15 +872,15 @@ private fun DrawScope.drawMachineVise3D(
     val vy0 = stock.min.y - 4f
     val vy1 = stock.max.y + 4f
 
-    val b0 = projectPoint(Point3D(vx0, vy0, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val b1 = projectPoint(Point3D(vx1, vy0, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val b2 = projectPoint(Point3D(vx1, vy1, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val b3 = projectPoint(Point3D(vx0, vy1, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+    val b0 = projectPoint(Point3D(vx0, vy0, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val b1 = projectPoint(Point3D(vx1, vy0, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val b2 = projectPoint(Point3D(vx1, vy1, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val b3 = projectPoint(Point3D(vx0, vy1, zViseBottom), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
-    val t0 = projectPoint(Point3D(vx0, vy0, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val t1 = projectPoint(Point3D(vx1, vy0, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val t2 = projectPoint(Point3D(vx1, vy1, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val t3 = projectPoint(Point3D(vx0, vy1, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+    val t0 = projectPoint(Point3D(vx0, vy0, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val t1 = projectPoint(Point3D(vx1, vy0, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val t2 = projectPoint(Point3D(vx1, vy1, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val t3 = projectPoint(Point3D(vx0, vy1, zViseTop), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
     // Vise body (Dark anthracite cast iron)
     val viseFront = Path().apply {
@@ -737,16 +903,17 @@ private fun DrawScope.drawStockEdges3D(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
     val x0 = stock.min.x; val x1 = stock.max.x
     val y0 = stock.min.y; val y1 = stock.max.y
     val z0 = stock.min.z; val z1 = stock.max.z
 
-    val c0 = projectPoint(Point3D(x0, y0, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val c1 = projectPoint(Point3D(x1, y0, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val c2 = projectPoint(Point3D(x1, y1, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
-    val c3 = projectPoint(Point3D(x0, y1, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch)
+    val c0 = projectPoint(Point3D(x0, y0, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val c1 = projectPoint(Point3D(x1, y0, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val c2 = projectPoint(Point3D(x1, y1, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+    val c3 = projectPoint(Point3D(x0, y1, z1), ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
 
     val edgeColor = Color(0xFF8B9E8D).copy(alpha = 0.6f)
     drawLine(edgeColor, c0, c1, strokeWidth = 1f)
@@ -758,7 +925,7 @@ private fun DrawScope.drawStockEdges3D(
 /**
  * Rotating 3D Orientation Gizmo (Triad) in the bottom-left corner
  */
-private fun DrawScope.drawOrientationGizmo3D(yaw: Float, pitch: Float) {
+private fun DrawScope.drawOrientationGizmo3D(yaw: Float, pitch: Float, roll: Float = 0f) {
     val gizmoCenter = Offset(45.dp.toPx(), size.height - 45.dp.toPx())
     val r = 26.dp.toPx()
 
@@ -769,17 +936,17 @@ private fun DrawScope.drawOrientationGizmo3D(yaw: Float, pitch: Float) {
     val axisLen = r * 0.85f
 
     // X Axis (Red)
-    val pX = projectPoint(Point3D(axisLen, 0f, 0f), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch)
+    val pX = projectPoint(Point3D(axisLen, 0f, 0f), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch, roll)
     drawLine(Color(0xFFE53935), gizmoCenter, pX, strokeWidth = 2.5f)
     drawCircle(Color(0xFFE53935), radius = 3f, center = pX)
 
     // Y Axis (Green)
-    val pY = projectPoint(Point3D(0f, axisLen, 0f), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch)
+    val pY = projectPoint(Point3D(0f, axisLen, 0f), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch, roll)
     drawLine(Color(0xFF43A047), gizmoCenter, pY, strokeWidth = 2.5f)
     drawCircle(Color(0xFF43A047), radius = 3f, center = pY)
 
     // Z Axis (Blue)
-    val pZ = projectPoint(Point3D(0f, 0f, axisLen), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch)
+    val pZ = projectPoint(Point3D(0f, 0f, axisLen), ViewMode.ORBIT_3D, gizmoCenter, 1f, yaw, pitch, roll)
     drawLine(Color(0xFF1E88E5), gizmoCenter, pZ, strokeWidth = 2.5f)
     drawCircle(Color(0xFF1E88E5), radius = 3f, center = pZ)
 }
@@ -791,15 +958,16 @@ private fun DrawScope.drawProgrammedContour(
     center: Offset,
     scale: Float,
     yaw: Float,
-    pitch: Float
+    pitch: Float,
+    roll: Float = 0f
 ) {
     val yellowContour = Color(0xFFFFEB3B).copy(alpha = 0.6f)
     val stroke = Stroke(width = 1.2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f))
 
     for (seg in segments) {
         if (seg.moveType == MoveType.RAPID) continue
-        val pStart = projectPoint(seg.programmedStart, mode, center, scale, yaw, pitch)
-        val pEnd = projectPoint(seg.programmedEnd, mode, center, scale, yaw, pitch)
+        val pStart = projectPoint(seg.programmedStart, mode, center, scale, yaw, pitch, roll)
+        val pEnd = projectPoint(seg.programmedEnd, mode, center, scale, yaw, pitch, roll)
         if (pStart.x != pEnd.x || pStart.y != pEnd.y) {
             drawLine(
                 color = yellowContour,
@@ -819,6 +987,7 @@ private fun DrawScope.drawSegment(
     scale: Float,
     yaw: Float,
     pitch: Float,
+    roll: Float = 0f,
     isExecuted: Boolean
 ) {
     val baseColor = when (seg.moveType) {
@@ -832,8 +1001,8 @@ private fun DrawScope.drawSegment(
 
     when (seg) {
         is ToolpathSegment.Linear -> {
-            val pStart = projectPoint(seg.start, mode, center, scale, yaw, pitch)
-            val pEnd = projectPoint(seg.end, mode, center, scale, yaw, pitch)
+            val pStart = projectPoint(seg.start, mode, center, scale, yaw, pitch, roll)
+            val pEnd = projectPoint(seg.end, mode, center, scale, yaw, pitch, roll)
             drawLine(
                 color = color,
                 start = pStart,
@@ -855,7 +1024,7 @@ private fun DrawScope.drawSegment(
             }
 
             val path = Path()
-            val p0 = projectPoint(seg.start, mode, center, scale, yaw, pitch)
+            val p0 = projectPoint(seg.start, mode, center, scale, yaw, pitch, roll)
             path.moveTo(p0.x, p0.y)
 
             for (i in 1..steps) {
@@ -864,7 +1033,7 @@ private fun DrawScope.drawSegment(
                 val ax = seg.center.x + seg.radius * cos(angle)
                 val ay = seg.center.y + seg.radius * sin(angle)
                 val az = seg.start.z + t * (seg.end.z - seg.start.z)
-                val pt = projectPoint(Point3D(ax, ay, az), mode, center, scale, yaw, pitch)
+                val pt = projectPoint(Point3D(ax, ay, az), mode, center, scale, yaw, pitch, roll)
                 path.lineTo(pt.x, pt.y)
             }
 
@@ -1006,11 +1175,12 @@ private fun DrawScope.drawToolAssembly(
     scale: Float,
     yaw: Float,
     pitch: Float,
+    roll: Float = 0f,
     showHolder: Boolean,
     stock: StockBox,
     isRapid: Boolean
 ) {
-    val tipScreen = projectPoint(pos, viewMode, center, scale, yaw, pitch)
+    val tipScreen = projectPoint(pos, viewMode, center, scale, yaw, pitch, roll)
 
     // Center yellow crosshair dot
     drawCircle(color = CncToolYellow, radius = 3.5f, center = tipScreen)
@@ -1055,7 +1225,7 @@ private fun DrawScope.drawToolAssembly(
         // Vertical assembly: Cutter flute + HSK/BT40/SK40 Holder
         val stickOut = tool.stickOut
         val fluteEnd = Point3D(pos.x, pos.y, pos.z + stickOut)
-        val fluteTopScreen = projectPoint(fluteEnd, viewMode, center, scale, yaw, pitch)
+        val fluteTopScreen = projectPoint(fluteEnd, viewMode, center, scale, yaw, pitch, roll)
 
         // Cutter flute cylinder
         val fluteColor = when (tool.geometryType) {
@@ -1075,7 +1245,7 @@ private fun DrawScope.drawToolAssembly(
         if (showHolder) {
             // 1. Collet nut (ER32 / HSK-A63 collet)
             val nutTop = Point3D(pos.x, pos.y, pos.z + stickOut + tool.holder.colletLength)
-            val nutTopScreen = projectPoint(nutTop, viewMode, center, scale, yaw, pitch)
+            val nutTopScreen = projectPoint(nutTop, viewMode, center, scale, yaw, pitch, roll)
             drawLine(
                 color = Color(0xFF37474F),
                 start = fluteTopScreen,
@@ -1085,7 +1255,7 @@ private fun DrawScope.drawToolAssembly(
 
             // 2. Chuck body
             val chuckTop = Point3D(pos.x, pos.y, pos.z + stickOut + tool.holder.colletLength + 25f)
-            val chuckTopScreen = projectPoint(chuckTop, viewMode, center, scale, yaw, pitch)
+            val chuckTopScreen = projectPoint(chuckTop, viewMode, center, scale, yaw, pitch, roll)
             drawLine(
                 color = Color(0xFF455A64),
                 start = nutTopScreen,
@@ -1095,7 +1265,7 @@ private fun DrawScope.drawToolAssembly(
 
             // 3. Holder V-Flange (HSK-A63 / BT40 / SK40)
             val flangeTop = Point3D(pos.x, pos.y, pos.z + stickOut + tool.holder.colletLength + 38f)
-            val flangeTopScreen = projectPoint(flangeTop, viewMode, center, scale, yaw, pitch)
+            val flangeTopScreen = projectPoint(flangeTop, viewMode, center, scale, yaw, pitch, roll)
             drawLine(
                 color = Color(0xFF78909C),
                 start = chuckTopScreen,

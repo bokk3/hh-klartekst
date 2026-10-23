@@ -105,6 +105,7 @@ data class SimulationUiState(
     val showQParamDialog: Boolean = false,
     val orbitYaw: Float = 45f,
     val orbitPitch: Float = 35f,
+    val orbitRoll: Float = 0f,
     val sectionPlane: SectionPlane = SectionPlane.Y_AXIS,
     val sectionOffset: Float = 0f,
     val showToolHolder: Boolean = true,
