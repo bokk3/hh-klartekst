@@ -70,6 +70,9 @@ sealed class KlartextBlock {
         val x: Float? = null,
         val y: Float? = null,
         val z: Float? = null,
+        val rawX: String? = null,
+        val rawY: String? = null,
+        val rawZ: String? = null,
         val isIncrementalX: Boolean = false,
         val isIncrementalY: Boolean = false,
         val isIncrementalZ: Boolean = false,
@@ -78,6 +81,7 @@ sealed class KlartextBlock {
         val isRapid: Boolean = false,
         val isFeedAuto: Boolean = false,
         val feedRate: Float? = null,
+        val rawFeed: String? = null,
         val mCodes: List<Int> = emptyList()
     ) : KlartextBlock()
 
@@ -87,6 +91,9 @@ sealed class KlartextBlock {
         val pr: Float,
         val pa: Float,
         val z: Float? = null,
+        val rawPR: String? = null,
+        val rawPA: String? = null,
+        val rawZ: String? = null,
         val isIncrementalPR: Boolean = false,
         val isIncrementalPA: Boolean = false,
         val explicitComp: RadiusComp? = null,
@@ -100,6 +107,8 @@ sealed class KlartextBlock {
         override val rawText: String,
         val x: Float? = null,
         val y: Float? = null,
+        val rawX: String? = null,
+        val rawY: String? = null,
         val isIncrementalX: Boolean = false,
         val isIncrementalY: Boolean = false,
         val isIncremental: Boolean = false
@@ -111,6 +120,9 @@ sealed class KlartextBlock {
         val x: Float? = null,
         val y: Float? = null,
         val z: Float? = null,
+        val rawX: String? = null,
+        val rawY: String? = null,
+        val rawZ: String? = null,
         val isIncrementalX: Boolean = false,
         val isIncrementalY: Boolean = false,
         val isIncrementalZ: Boolean = false,
@@ -127,6 +139,8 @@ sealed class KlartextBlock {
         override val rawText: String,
         val pa: Float,
         val z: Float? = null,
+        val rawPA: String? = null,
+        val rawZ: String? = null,
         val isIncrementalPA: Boolean = false,
         val direction: Direction = Direction.CCW,
         val explicitComp: RadiusComp? = null,
@@ -139,9 +153,12 @@ sealed class KlartextBlock {
         override val rawText: String,
         val x: Float? = null,
         val y: Float? = null,
+        val rawX: String? = null,
+        val rawY: String? = null,
         val isIncrementalX: Boolean = false,
         val isIncrementalY: Boolean = false,
         val radius: Float, // signed: + <= 180 deg, - > 180 deg
+        val rawRadius: String? = null,
         val direction: Direction = Direction.CCW,
         val comp: RadiusComp = RadiusComp.R0,
         val explicitComp: RadiusComp? = null,
@@ -156,6 +173,9 @@ sealed class KlartextBlock {
         val x: Float? = null,
         val y: Float? = null,
         val z: Float? = null,
+        val rawX: String? = null,
+        val rawY: String? = null,
+        val rawZ: String? = null,
         val isIncrementalX: Boolean = false,
         val isIncrementalY: Boolean = false,
         val explicitComp: RadiusComp? = null,
@@ -239,6 +259,25 @@ sealed class KlartextBlock {
         override val lineNumber: Int,
         override val rawText: String,
         val mCodes: List<Int> = emptyList()
+    ) : KlartextBlock()
+
+    data class QParamAssignment(
+        override val lineNumber: Int,
+        override val rawText: String,
+        val targetQ: Int,
+        val expression: String,
+        val fnType: Int? = null
+    ) : KlartextBlock()
+
+    data class QParamConditionalJump(
+        override val lineNumber: Int,
+        override val rawText: String,
+        val fnType: Int, // 9: EQU, 10: NE, 11: GT, 12: LT
+        val operand1: String,
+        val condition: String, // EQU, NE, GT, LT
+        val operand2: String,
+        val targetLabelNum: Int,
+        val targetLabelName: String
     ) : KlartextBlock()
 
     data class QParamDef(

@@ -122,14 +122,16 @@ fun ControlPanel(
                 }
             }
 
-            // View mode toggles: XY, XZ, YZ, MAT (2.5D Material), 3D
+            // View mode toggles: XY, XZ, YZ, MAT (2.5D Material), ISO, 3D (Orbit), SNIJD (Section)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 listOf(
                     ViewMode.TOP_XY to "XY",
                     ViewMode.FRONT_XZ to "XZ",
                     ViewMode.SIDE_YZ to "YZ",
                     ViewMode.MATERIAL_25D to "MAT",
-                    ViewMode.ISOMETRIC to "3D"
+                    ViewMode.ISOMETRIC to "ISO",
+                    ViewMode.ORBIT_3D to "3D",
+                    ViewMode.SECTION_CUT to "SNIJD"
                 ).forEach { (mode, label) ->
                     val isSelected = viewMode == mode
                     Button(

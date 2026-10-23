@@ -23,11 +23,18 @@ data class MachineState(
 )
 
 enum class ViewMode {
-    TOP_XY,      // 2D Bovenaanzicht XY (met geprogrammeerde contour + equidistante freesbaan)
-    FRONT_XZ,    // 2D Vooraanzicht XZ
-    SIDE_YZ,     // 2D Zijaanzicht YZ
-    MATERIAL_25D,// 2.5D Materiaalafname Bovenaanzicht (TNC 640 kleuren)
-    ISOMETRIC    // 2.5D Isometrisch Hoogteveld + Freesbanen
+    TOP_XY,       // 2D Bovenaanzicht XY (met geprogrammeerde contour + equidistante freesbaan)
+    FRONT_XZ,     // 2D Vooraanzicht XZ
+    SIDE_YZ,      // 2D Zijaanzicht YZ
+    MATERIAL_25D, // 2.5D Materiaalafname Bovenaanzicht (TNC 640 kleuren)
+    ISOMETRIC,    // 2.5D Isometrisch Hoogteveld + Freesbanen
+    ORBIT_3D,     // 3D Vrij Roteerbare Orbit Camera (touch drag to rotate)
+    SECTION_CUT   // Doorsnede-weergave (inwendige kamers/boringen)
+}
+
+enum class SectionPlane {
+    X_AXIS, // Doorsnede loodrecht op X (YZ aanzicht)
+    Y_AXIS  // Doorsnede loodrecht op Y (XZ aanzicht)
 }
 
 data class ZMapHeightfield(
@@ -88,5 +95,12 @@ data class SimulationUiState(
     val showCalculator: Boolean = false,
     val showDiagnosticsSheet: Boolean = false,
     val showToolTableDialog: Boolean = false,
-    val showImportExportDialog: Boolean = false
+    val showImportExportDialog: Boolean = false,
+    val qParameters: Map<Int, Float> = emptyMap(),
+    val showQParamDialog: Boolean = false,
+    val orbitYaw: Float = 45f,
+    val orbitPitch: Float = 35f,
+    val sectionPlane: SectionPlane = SectionPlane.Y_AXIS,
+    val sectionOffset: Float = 0f,
+    val showToolHolder: Boolean = true
 )

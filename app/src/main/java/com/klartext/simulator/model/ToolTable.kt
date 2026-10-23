@@ -10,6 +10,14 @@ enum class ToolGeometryType {
     TAP                  // Schroefdraadtap (met spoed)
 }
 
+data class ToolHolder(
+    val type: String = "SK40-ER32",
+    val colletDiameter: Float = 50f, // mm
+    val colletLength: Float = 30f,   // mm
+    val flangeDiameter: Float = 63f, // mm
+    val gaugeLength: Float = 60f     // mm
+)
+
 data class TncTool(
     val number: Int,
     val name: String,
@@ -19,9 +27,11 @@ data class TncTool(
     val pointAngleDeg: Float = 180f,
     val pitchMm: Float? = null,
     val teeth: Int = 4,
-    val description: String = ""
+    val description: String = "",
+    val holder: ToolHolder = ToolHolder()
 ) {
     val radius: Float get() = diameter / 2f
+    val stickOut: Float get() = (length * 0.55f).coerceIn(35f, 75f)
 }
 
 object ToolTable {

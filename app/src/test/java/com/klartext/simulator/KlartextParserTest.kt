@@ -240,4 +240,90 @@ class KlartextParserTest {
         assertTrue(isoOutput.contains("G03"))
         assertTrue(isoOutput.contains("M30"))
     }
+
+    @Test
+    fun testQExpressionEvaluator() {
+        val qMap = mapOf(1 to 50f, 2 to 30f, 3 to 90f, 4 to 16f)
+
+        // Basic arithmetic
+        assertEquals(80f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("+Q1 + +Q2", qMap), 0.001f)
+        assertEquals(20f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("+Q1 - +Q2", qMap), 0.001f)
+        assertEquals(1500f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("Q1 * Q2", qMap), 0.001f)
+        assertEquals(4f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("SQRT +Q4", qMap), 0.001f)
+
+        // Trigonometry strictly in degrees
+        assertEquals(1.0f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("SIN +Q3", qMap), 0.001f) // SIN(90 deg) = 1
+        assertEquals(0.5f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("SIN 30", qMap), 0.001f)  // SIN(30 deg) = 0.5
+        assertEquals(0.5f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("COS 60", qMap), 0.001f)  // COS(60 deg) = 0.5
+        assertEquals(1.0f, com.klartext.simulator.parser.QExpressionEvaluator.evaluate("COS 0", qMap), 0.001f)   // COS(0 deg) = 1.0
+    }
+
+    @Test
+    fun testParametricEllipseQParameters() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.demoParametricEllipse)
+        assertTrue("Blocks should be parsed", blocks.isNotEmpty())
+
+        val interpreter = KlartextInterpreter()
+        val result = interpreter.interpret(blocks)
+
+        assertEquals("No errors expected in parametric ellipse program", 0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertTrue("Should have generated many elliptical segments", result.segments.size > 70)
+
+        // Verify final Q-parameters
+        assertEquals(50f, result.qParameters[1] ?: 0f, 0.01f)
+        assertEquals(30f, result.qParameters[2] ?: 0f, 0.01f)
+        assertTrue("Loop counter Q3 should have reached >= 365", (result.qParameters[3] ?: 0f) >= 365f)
+    }
+
+    @Test
+    fun testConditionalJumpsFN9to12() {
+        val prog = """
+            0 BEGIN PGM JUMP_TEST MM
+            1 FN 0: Q1 = +10
+            2 FN 0: Q2 = +0
+            3 ; Unconditional jump via EQU:
+            4 FN 9: IF +Q1 EQU +10 GOTO LBL "HIT_EQU"
+            5 L X+999 Y+999 R0 FMAX ; Should be skipped
+            6 LBL "HIT_EQU"
+            7 FN 0: Q2 = +1
+            8 ; Test GT jump:
+            9 FN 11: IF +Q1 GT +5 GOTO LBL "HIT_GT"
+            10 L X+888 Y+888 R0 FMAX ; Should be skipped
+            11 LBL "HIT_GT"
+            12 FN 0: Q2 = +2
+            13 END PGM JUMP_TEST MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(prog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertEquals(2f, result.qParameters[2] ?: 0f, 0.01f)
+        // Check that skipped blocks did not generate segments
+        assertFalse(result.segments.any { it.end.x == 999f || it.end.x == 888f })
+    }
+
+    @Test
+    fun testToolHolderCollisionDetection() {
+        val collisionProg = """
+            0 BEGIN PGM COLLISION_TEST MM
+            1 BLK FORM 0.1 Z X+0 Y+0 Z-100
+            2 BLK FORM 0.2 X+100 Y+100 Z+0
+            3 TOOL CALL "FREES10" Z S3000 F500
+            4 L X+50 Y+50 R0 FMAX
+            5 ; Stick-out for FREES10 is ~44 mm (length 80 * 0.55).
+            6 ; Plunging to Z-90 penetrates way past the tool stick-out into solid stock!
+            7 L Z-90 R0 F300 M3
+            8 L Z+50 R0 FMAX M30
+            9 END PGM COLLISION_TEST MM
+        """.trimIndent()
+
+        val blocks = KlartextParser.parseProgram(collisionProg)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        val collisions = result.diagnostics.filter { it.code == TncErrorCode.TOOL_HOLDER_COLLISION }
+        assertTrue("Should detect tool holder collision when plunge exceeds stick-out", collisions.isNotEmpty())
+        assertEquals(DiagnosticSeverity.ERROR, collisions.first().severity)
+        assertTrue(collisions.first().message.contains("Houder botst") || collisions.first().message.contains("Gereedschapshouder"))
+    }
 }

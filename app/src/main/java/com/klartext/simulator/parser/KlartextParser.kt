@@ -11,18 +11,29 @@ object KlartextParser {
     private val coordXRegex = Pattern.compile("(?:^|\\s)(IX|X)\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val coordYRegex = Pattern.compile("(?:^|\\s)(IY|Y)\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val coordZRegex = Pattern.compile("(?:^|\\s)(IZ|Z)\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
+    private val rawXRegex = Pattern.compile("(?:^|\\s)(IX|X)\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
+    private val rawYRegex = Pattern.compile("(?:^|\\s)(IY|Y)\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
+    private val rawZRegex = Pattern.compile("(?:^|\\s)(IZ|Z)\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
     private val polarPRRegex = Pattern.compile("(?:^|\\s)(IPR|PR)\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val polarPARegex = Pattern.compile("(?:^|\\s)(IPA|PA)\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
+    private val rawPRRegex = Pattern.compile("(?:^|\\s)(IPR|PR)\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
+    private val rawPARegex = Pattern.compile("(?:^|\\s)(IPA|PA)\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
     private val radiusRegex = Pattern.compile("(?:^|\\s)R\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
+    private val rawRRegex = Pattern.compile("(?:^|\\s)R\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
     private val lenRegex = Pattern.compile("(?:^|\\s)LEN\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val ccaRegex = Pattern.compile("(?:^|\\s)CCA\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val dlRegex = Pattern.compile("(?:^|\\s)DL\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val drOffsetRegex = Pattern.compile("(?:^|\\s)DR\\s*([+-]\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val feedRegex = Pattern.compile("(?:^|\\s)F\\s*(\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
+    private val rawFeedRegex = Pattern.compile("(?:^|\\s)F\\s*([+-]?[A-Z0-9_().+*\\-]+)", Pattern.CASE_INSENSITIVE)
     private val speedRegex = Pattern.compile("(?:^|\\s)S\\s*(\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val mCodeRegex = Pattern.compile("(?:^|\\s)M\\s*(\\d+)", Pattern.CASE_INSENSITIVE)
     private val qParamPairRegex = Pattern.compile("Q(\\d+)\\s*=\\s*([+-]?\\d*\\.?\\d+)", Pattern.CASE_INSENSITIVE)
     private val quotedNameRegex = Pattern.compile("\"([^\"]+)\"")
+    private val qConditionalRegex = Pattern.compile(
+        """(?:FN\s*(\d+)\s*:\s*)?IF\s+([^\s]+)\s+(EQU|NE|GT|LT)\s+([^\s]+)\s+GOTO\s+LBL\s+(.+)""",
+        Pattern.CASE_INSENSITIVE
+    )
 
     fun parseProgram(content: String): List<KlartextBlock> {
         val rawLines = content.lines()
@@ -225,13 +236,17 @@ object KlartextParser {
             upper.startsWith("CC ") || upper == "CC" -> {
                 val xVal = parseCoord(coordXRegex, upper)
                 val yVal = parseCoord(coordYRegex, upper)
-                val incX = xVal?.second == true
-                val incY = yVal?.second == true
+                val rawXVal = parseRawCoord(rawXRegex, upper)
+                val rawYVal = parseRawCoord(rawYRegex, upper)
+                val incX = xVal?.second ?: rawXVal?.second ?: false
+                val incY = yVal?.second ?: rawYVal?.second ?: false
                 KlartextBlock.CircleCenter(
                     lineNumber = lineNum,
                     rawText = line,
                     x = xVal?.first,
                     y = yVal?.first,
+                    rawX = rawXVal?.first,
+                    rawY = rawYVal?.first,
                     isIncrementalX = incX,
                     isIncrementalY = incY,
                     isIncremental = incX || incY
@@ -242,6 +257,9 @@ object KlartextParser {
                 val prVal = parseCoord(polarPRRegex, upper)
                 val paVal = parseCoord(polarPARegex, upper)
                 val zVal = parseCoord(coordZRegex, upper)
+                val rawPRVal = parseRawCoord(rawPRRegex, upper)
+                val rawPAVal = parseRawCoord(rawPARegex, upper)
+                val rawZVal = parseRawCoord(rawZRegex, upper)
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val isRapid = upper.contains("FMAX")
                 val feed = parseValue(feedRegex, upper)
@@ -252,8 +270,11 @@ object KlartextParser {
                     pr = prVal?.first ?: 0f,
                     pa = paVal?.first ?: 0f,
                     z = zVal?.first,
-                    isIncrementalPR = prVal?.second ?: false,
-                    isIncrementalPA = paVal?.second ?: false,
+                    rawPR = rawPRVal?.first,
+                    rawPA = rawPAVal?.first,
+                    rawZ = rawZVal?.first,
+                    isIncrementalPR = prVal?.second ?: rawPRVal?.second ?: false,
+                    isIncrementalPA = paVal?.second ?: rawPAVal?.second ?: false,
                     explicitComp = explicitComp,
                     isRapid = isRapid,
                     feedRate = feed,
@@ -264,6 +285,8 @@ object KlartextParser {
             upper.startsWith("CP ") -> {
                 val paVal = parseCoord(polarPARegex, upper)
                 val zVal = parseCoord(coordZRegex, upper)
+                val rawPAVal = parseRawCoord(rawPARegex, upper)
+                val rawZVal = parseRawCoord(rawZRegex, upper)
                 val dir = if (upper.contains("DR-")) Direction.CW else Direction.CCW
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val feed = parseValue(feedRegex, upper)
@@ -273,7 +296,9 @@ object KlartextParser {
                     rawText = line,
                     pa = paVal?.first ?: 0f,
                     z = zVal?.first,
-                    isIncrementalPA = paVal?.second ?: false,
+                    rawPA = rawPAVal?.first,
+                    rawZ = rawZVal?.first,
+                    isIncrementalPA = paVal?.second ?: rawPAVal?.second ?: false,
                     direction = dir,
                     explicitComp = explicitComp,
                     feedRate = feed,
@@ -284,7 +309,10 @@ object KlartextParser {
             upper.startsWith("CR ") -> {
                 val xVal = parseCoord(coordXRegex, upper)
                 val yVal = parseCoord(coordYRegex, upper)
+                val rawXVal = parseRawCoord(rawXRegex, upper)
+                val rawYVal = parseRawCoord(rawYRegex, upper)
                 val r = parseValue(radiusRegex, upper) ?: 10f
+                val rawR = extractRawParam(rawRRegex, upper)
                 val dir = if (upper.contains("DR-")) Direction.CW else Direction.CCW
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val comp = explicitComp ?: RadiusComp.R0
@@ -296,9 +324,12 @@ object KlartextParser {
                     rawText = line,
                     x = xVal?.first,
                     y = yVal?.first,
-                    isIncrementalX = xVal?.second ?: false,
-                    isIncrementalY = yVal?.second ?: false,
+                    rawX = rawXVal?.first,
+                    rawY = rawYVal?.first,
+                    isIncrementalX = xVal?.second ?: rawXVal?.second ?: false,
+                    isIncrementalY = yVal?.second ?: rawYVal?.second ?: false,
                     radius = r,
+                    rawRadius = rawR,
                     direction = dir,
                     comp = comp,
                     explicitComp = explicitComp,
@@ -312,6 +343,9 @@ object KlartextParser {
                 val xVal = parseCoord(coordXRegex, upper)
                 val yVal = parseCoord(coordYRegex, upper)
                 val zVal = parseCoord(coordZRegex, upper)
+                val rawXVal = parseRawCoord(rawXRegex, upper)
+                val rawYVal = parseRawCoord(rawYRegex, upper)
+                val rawZVal = parseRawCoord(rawZRegex, upper)
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val feed = parseValue(feedRegex, upper)
                 val mCodes = parseMCodes(upper)
@@ -321,8 +355,11 @@ object KlartextParser {
                     x = xVal?.first,
                     y = yVal?.first,
                     z = zVal?.first,
-                    isIncrementalX = xVal?.second ?: false,
-                    isIncrementalY = yVal?.second ?: false,
+                    rawX = rawXVal?.first,
+                    rawY = rawYVal?.first,
+                    rawZ = rawZVal?.first,
+                    isIncrementalX = xVal?.second ?: rawXVal?.second ?: false,
+                    isIncrementalY = yVal?.second ?: rawYVal?.second ?: false,
                     explicitComp = explicitComp,
                     feedRate = feed,
                     mCodes = mCodes
@@ -333,6 +370,9 @@ object KlartextParser {
                 val xVal = parseCoord(coordXRegex, upper)
                 val yVal = parseCoord(coordYRegex, upper)
                 val zVal = parseCoord(coordZRegex, upper)
+                val rawXVal = parseRawCoord(rawXRegex, upper)
+                val rawYVal = parseRawCoord(rawYRegex, upper)
+                val rawZVal = parseRawCoord(rawZRegex, upper)
                 val dir = if (upper.contains("DR-")) Direction.CW else Direction.CCW
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val comp = explicitComp ?: RadiusComp.R0
@@ -345,9 +385,12 @@ object KlartextParser {
                     x = xVal?.first,
                     y = yVal?.first,
                     z = zVal?.first,
-                    isIncrementalX = xVal?.second ?: false,
-                    isIncrementalY = yVal?.second ?: false,
-                    isIncrementalZ = zVal?.second ?: false,
+                    rawX = rawXVal?.first,
+                    rawY = rawYVal?.first,
+                    rawZ = rawZVal?.first,
+                    isIncrementalX = xVal?.second ?: rawXVal?.second ?: false,
+                    isIncrementalY = yVal?.second ?: rawYVal?.second ?: false,
+                    isIncrementalZ = zVal?.second ?: rawZVal?.second ?: false,
                     direction = dir,
                     comp = comp,
                     explicitComp = explicitComp,
@@ -361,11 +404,15 @@ object KlartextParser {
                 val xVal = parseCoord(coordXRegex, upper)
                 val yVal = parseCoord(coordYRegex, upper)
                 val zVal = parseCoord(coordZRegex, upper)
+                val rawXVal = parseRawCoord(rawXRegex, upper)
+                val rawYVal = parseRawCoord(rawYRegex, upper)
+                val rawZVal = parseRawCoord(rawZRegex, upper)
                 val explicitComp = parseExplicitRadiusComp(upper)
                 val comp = explicitComp ?: RadiusComp.R0
                 val isRapid = upper.contains("FMAX")
                 val isFeedAuto = upper.contains("F AUTO") || upper.contains("FAUTO")
                 val feed = parseValue(feedRegex, upper)
+                val rawFeed = extractRawParam(rawFeedRegex, upper)
                 val mCodes = parseMCodes(upper)
                 KlartextBlock.Linear(
                     lineNumber = lineNum,
@@ -373,14 +420,18 @@ object KlartextParser {
                     x = xVal?.first,
                     y = yVal?.first,
                     z = zVal?.first,
-                    isIncrementalX = xVal?.second ?: false,
-                    isIncrementalY = yVal?.second ?: false,
-                    isIncrementalZ = zVal?.second ?: false,
+                    rawX = rawXVal?.first,
+                    rawY = rawYVal?.first,
+                    rawZ = rawZVal?.first,
+                    isIncrementalX = xVal?.second ?: rawXVal?.second ?: false,
+                    isIncrementalY = yVal?.second ?: rawYVal?.second ?: false,
+                    isIncrementalZ = zVal?.second ?: rawZVal?.second ?: false,
                     comp = comp,
                     explicitComp = explicitComp,
                     isRapid = isRapid,
                     isFeedAuto = isFeedAuto,
                     feedRate = feed,
+                    rawFeed = rawFeed,
                     mCodes = mCodes
                 )
             }
@@ -494,37 +545,50 @@ object KlartextParser {
     }
 
     private fun parseQParamBlock(lineNum: Int, rawLine: String, upper: String): KlartextBlock {
-        // e.g. FN 0: Q1 = +10  or  FN 1: Q1 = +Q2 + +Q3  or  Q1 = 25
-        val fnType = when {
-            upper.startsWith("FN 1") -> 1
-            upper.startsWith("FN 2") -> 2
-            upper.startsWith("FN 3") -> 3
-            upper.startsWith("FN 4") -> 4
-            else -> 0
+        val condMatcher = qConditionalRegex.matcher(upper)
+        if (condMatcher.find()) {
+            val fnNum = condMatcher.group(1)?.toIntOrNull() ?: 9
+            val op1 = condMatcher.group(2)?.trim() ?: "0"
+            val condition = condMatcher.group(3)?.uppercase(Locale.ROOT) ?: "EQU"
+            val op2 = condMatcher.group(4)?.trim() ?: "0"
+            val rawTarget = condMatcher.group(5)?.trim() ?: "0"
+            val targetName: String
+            val targetNum: Int
+            if (rawTarget.startsWith("\"") && rawTarget.endsWith("\"")) {
+                targetName = rawTarget.removeSurrounding("\"").lowercase(Locale.ROOT)
+                targetNum = targetName.hashCode()
+            } else {
+                targetName = rawTarget.lowercase(Locale.ROOT)
+                targetNum = rawTarget.toIntOrNull() ?: targetName.hashCode()
+            }
+            return KlartextBlock.QParamConditionalJump(
+                lineNumber = lineNum,
+                rawText = rawLine,
+                fnType = fnNum,
+                operand1 = op1,
+                condition = condition,
+                operand2 = op2,
+                targetLabelNum = targetNum,
+                targetLabelName = targetName
+            )
         }
-        val eqSide = upper.substringAfter(":", upper)
-        val targetStr = eqSide.substringBefore("=").trim().removePrefix("Q")
+
+        // Assignment: FN 0..8 or free formula Qx = ...
+        val fnType = if (upper.startsWith("FN ")) {
+            upper.removePrefix("FN ").substringBefore(":").trim().toIntOrNull()
+        } else null
+
+        val assignmentPart = if (upper.contains(":")) upper.substringAfter(":") else upper
+        val targetStr = assignmentPart.substringBefore("=").trim().removePrefix("Q").trim()
         val targetQ = targetStr.toIntOrNull() ?: 1
-        val rhs = eqSide.substringAfter("=", "").trim()
+        val expression = assignmentPart.substringAfter("=", "").trim()
 
-        val tokens = rhs.split("\\s+".toRegex()).filter { it.isNotEmpty() }
-        val tok1 = tokens.getOrNull(0) ?: "0"
-        val isQ1 = tok1.contains("Q")
-        val val1 = tok1.replace("Q", "").toFloatOrNull() ?: 0f
-
-        val tok2 = tokens.getOrNull(2) ?: "0"
-        val isQ2 = tok2.contains("Q")
-        val val2 = tok2.replace("Q", "").toFloatOrNull() ?: 0f
-
-        return KlartextBlock.QParamDef(
+        return KlartextBlock.QParamAssignment(
             lineNumber = lineNum,
             rawText = rawLine,
-            fnType = fnType,
             targetQ = targetQ,
-            value1 = val1,
-            isQ1 = isQ1,
-            value2 = val2,
-            isQ2 = isQ2
+            expression = expression,
+            fnType = fnType
         )
     }
 
@@ -552,6 +616,24 @@ object KlartextParser {
             val isInc = prefix.uppercase(Locale.ROOT).startsWith("I")
             val v = m.group(2)?.toFloatOrNull() ?: 0f
             Pair(v, isInc)
+        } else null
+    }
+
+    private fun parseRawCoord(pattern: Pattern, text: String): Pair<String, Boolean>? {
+        val m = pattern.matcher(text)
+        return if (m.find()) {
+            val prefix = m.group(1) ?: ""
+            val isInc = prefix.uppercase(Locale.ROOT).startsWith("I")
+            val expr = if (m.groupCount() >= 2) m.group(2) else m.group(1)
+            Pair((expr ?: "").trim(), isInc)
+        } else null
+    }
+
+    private fun extractRawParam(pattern: Pattern, text: String): String? {
+        val m = pattern.matcher(text)
+        return if (m.find()) {
+            val expr = if (m.groupCount() >= 2) m.group(2) else m.group(1)
+            expr?.trim()
         } else null
     }
 

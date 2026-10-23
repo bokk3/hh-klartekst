@@ -114,10 +114,12 @@ fun SimulatorScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // 2. Simulation Canvas (2D Dual path & 2.5D material removal)
+            // 2. Simulation Canvas (2D Dual path & 2.5D material removal, 3D Orbit, Section Cut)
             SimulationCanvas(
                 state = uiState,
                 currentStepIndex = uiState.machineState.currentStepIndex,
+                onToggleSectionPlane = { viewModel.toggleSectionPlane() },
+                onToggleToolHolder = { viewModel.toggleToolHolder() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1.3f)
@@ -166,6 +168,7 @@ fun SimulatorScreen(
                 onOpenCalculator = { viewModel.openCalculator() },
                 onOpenDiagnostics = { viewModel.openDiagnostics() },
                 onOpenToolTable = { viewModel.openToolTable() },
+                onOpenQParams = { viewModel.openQParamDialog() },
                 onOpenImportExport = { viewModel.openImportExport() },
                 onCopyLine = { viewModel.copyCurrentLine() },
                 onPasteLine = { viewModel.pasteLine() },
@@ -190,6 +193,13 @@ fun SimulatorScreen(
 
     if (uiState.showToolTableDialog) {
         ToolTableDialog(onDismiss = { viewModel.closeToolTable() })
+    }
+
+    if (uiState.showQParamDialog) {
+        QParameterMonitorDialog(
+            qParameters = uiState.qParameters,
+            onDismiss = { viewModel.closeQParamDialog() }
+        )
     }
 
     if (uiState.showImportExportDialog) {

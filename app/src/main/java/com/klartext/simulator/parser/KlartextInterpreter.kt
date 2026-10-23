@@ -1,6 +1,7 @@
 package com.klartext.simulator.parser
 
 import com.klartext.simulator.model.*
+import java.util.Locale
 import kotlin.math.*
 
 class KlartextInterpreter {
@@ -95,6 +96,26 @@ class KlartextInterpreter {
             return pt + normal * rEff
         }
 
+        fun checkHolderCollision(lineNum: Int, x: Float, y: Float, z: Float) {
+            val collisionZ = stockMax.z - activeTool.stickOut
+            if (z < collisionZ) {
+                val colletR = activeTool.holder.colletDiameter / 2f
+                val inStock = x in (stockMin.x - colletR)..(stockMax.x + colletR) &&
+                              y in (stockMin.y - colletR)..(stockMax.y + colletR)
+                if (inStock) {
+                    diagnostics.add(
+                        TncDiagnostic(
+                            lineNumber = lineNum,
+                            severity = DiagnosticSeverity.ERROR,
+                            code = TncErrorCode.TOOL_HOLDER_COLLISION,
+                            title = "KOL-BEWAKING: Houder botst met werkstuk",
+                            message = "Fout op regel $lineNum: Gereedschapshouder (${activeTool.holder.type}, Ø${activeTool.holder.colletDiameter.toInt()} mm) raakt werkstuk (Z=${formatNum(z)} mm overschrijdt uitsteeklengte ${formatNum(activeTool.stickOut)} mm)"
+                        )
+                    )
+                }
+            }
+        }
+
         fun addLinearSegment(
             lineNum: Int,
             progStart: Point3D,
@@ -161,6 +182,9 @@ class KlartextInterpreter {
             val actualEnd = Point3D(equiEnd2D.x, equiEnd2D.y, progEnd.z)
 
             if (actualStart.distanceTo(actualEnd) > 0.0001f || progStart.distanceTo(progEnd) > 0.0001f) {
+                if (moveType != MoveType.RAPID || actualEnd.z < stockMax.z) {
+                    checkHolderCollision(lineNum, actualEnd.x, actualEnd.y, actualEnd.z)
+                }
                 segments.add(
                     ToolpathSegment.Linear(
                         lineNumber = lineNum,
@@ -243,6 +267,8 @@ class KlartextInterpreter {
                 Point2D(sin(endAngle), -cos(endAngle))
             }
 
+            checkHolderCollision(lineNum, equiEnd.x, equiEnd.y, equiEnd.z)
+
             segments.add(
                 ToolpathSegment.Arc(
                     lineNumber = lineNum,
@@ -270,22 +296,46 @@ class KlartextInterpreter {
             )
         }
 
+        fun resolveCoord(raw: String?, staticVal: Float?, qMap: Map<Int, Float>): Float? {
+            if (raw != null) {
+                if (raw.contains("Q", ignoreCase = true)) {
+                    return QExpressionEvaluator.evaluate(raw, qMap)
+                } else if (staticVal == null) {
+                    return raw.toFloatOrNull()
+                }
+            }
+            return staticVal
+        }
+
         fun peekNextTarget2D(fromPc: Int, curX: Float, curY: Float): Point2D? {
             for (k in (fromPc + 1) until blocks.size) {
                 when (val nb = blocks[k]) {
                     is KlartextBlock.Linear -> {
-                        val nx = if (nb.isIncrementalX) curX + (nb.x ?: 0f) else (nb.x?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (nb.y ?: 0f) else (nb.y?.plus(datumY) ?: curY)
+                        val rx = resolveCoord(nb.rawX, nb.x, qParams)
+                        val ry = resolveCoord(nb.rawY, nb.y, qParams)
+                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
+                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
                         if (hypot(nx - curX, ny - curY) > 1e-4f) return Point2D(nx, ny)
                     }
                     is KlartextBlock.CircleRadius -> {
-                        val nx = if (nb.isIncrementalX) curX + (nb.x ?: 0f) else (nb.x?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (nb.y ?: 0f) else (nb.y?.plus(datumY) ?: curY)
+                        val rx = resolveCoord(nb.rawX, nb.x, qParams)
+                        val ry = resolveCoord(nb.rawY, nb.y, qParams)
+                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
+                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
                         return Point2D(nx, ny)
                     }
                     is KlartextBlock.Circle -> {
-                        val nx = if (nb.isIncrementalX) curX + (nb.x ?: 0f) else (nb.x?.plus(datumX) ?: curX)
-                        val ny = if (nb.isIncrementalY) curY + (nb.y ?: 0f) else (nb.y?.plus(datumY) ?: curY)
+                        val rx = resolveCoord(nb.rawX, nb.x, qParams)
+                        val ry = resolveCoord(nb.rawY, nb.y, qParams)
+                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
+                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
+                        return Point2D(nx, ny)
+                    }
+                    is KlartextBlock.CircleTangential -> {
+                        val rx = resolveCoord(nb.rawX, nb.x, qParams)
+                        val ry = resolveCoord(nb.rawY, nb.y, qParams)
+                        val nx = if (nb.isIncrementalX) curX + (rx ?: 0f) else (rx?.plus(datumX) ?: curX)
+                        val ny = if (nb.isIncrementalY) curY + (ry ?: 0f) else (ry?.plus(datumY) ?: curY)
                         return Point2D(nx, ny)
                     }
                     is KlartextBlock.Depart -> {
@@ -318,15 +368,17 @@ class KlartextInterpreter {
                 }
 
                 is KlartextBlock.CircleCenter -> {
+                    val rx = resolveCoord(block.rawX, block.x, qParams)
+                    val ry = resolveCoord(block.rawY, block.y, qParams)
                     circleCenterX = when {
-                        block.x == null -> currentX
-                        block.isIncrementalX || block.isIncremental -> currentX + block.x
-                        else -> block.x + datumX
+                        rx == null -> currentX
+                        block.isIncrementalX || block.isIncremental -> currentX + rx
+                        else -> rx + datumX
                     }
                     circleCenterY = when {
-                        block.y == null -> currentY
-                        block.isIncrementalY || block.isIncremental -> currentY + block.y
-                        else -> block.y + datumY
+                        ry == null -> currentY
+                        block.isIncrementalY || block.isIncremental -> currentY + ry
+                        else -> ry + datumY
                     }
                 }
 
@@ -375,27 +427,32 @@ class KlartextInterpreter {
                 }
 
                 is KlartextBlock.Linear -> {
+                    val rx = resolveCoord(block.rawX, block.x, qParams)
+                    val ry = resolveCoord(block.rawY, block.y, qParams)
+                    val rz = resolveCoord(block.rawZ, block.z, qParams)
+                    val rFeed = resolveCoord(block.rawFeed, block.feedRate, qParams)
+
                     val targetX = when {
-                        block.x == null -> currentX
-                        block.isIncrementalX -> currentX + block.x
-                        else -> block.x + datumX
+                        rx == null -> currentX
+                        block.isIncrementalX -> currentX + rx
+                        else -> rx + datumX
                     }
                     val targetY = when {
-                        block.y == null -> currentY
-                        block.isIncrementalY -> currentY + block.y
-                        else -> block.y + datumY
+                        ry == null -> currentY
+                        block.isIncrementalY -> currentY + ry
+                        else -> ry + datumY
                     }
                     val targetZ = when {
-                        block.z == null -> currentZ
-                        block.isIncrementalZ -> currentZ + block.z
-                        else -> block.z + datumZ
+                        rz == null -> currentZ
+                        block.isIncrementalZ -> currentZ + rz
+                        else -> rz + datumZ
                     }
 
                     val movesXY = hypot(targetX - currentX, targetY - currentY) > 1e-4f
                     val isCuttingXY = movesXY && !block.isRapid && currentZ <= stockMax.z + 0.5f
                     updateModalComp(block.explicitComp, block.lineNumber, isCuttingXY)
 
-                    block.feedRate?.let { currentFeed = it }
+                    rFeed?.let { currentFeed = it }
                     if (block.mCodes.contains(3) || block.mCodes.contains(4)) spindleOn = true
                     if (block.mCodes.contains(5) || block.mCodes.contains(30)) spindleOn = false
 
@@ -407,7 +464,7 @@ class KlartextInterpreter {
 
                     val progStart = Point3D(currentX, currentY, currentZ)
                     val progEnd = Point3D(targetX, targetY, targetZ)
-                    val feed = if (block.isRapid) 99999f else (block.feedRate ?: currentFeed)
+                    val feed = if (block.isRapid) 99999f else (rFeed ?: currentFeed)
 
                     addLinearSegment(block.lineNumber, progStart, progEnd, moveType, feed, activeRadiusComp)
 
@@ -416,9 +473,10 @@ class KlartextInterpreter {
                     currentZ = targetZ
 
                     // Execute active cycle if M99 is on this block
-                    if (block.mCodes.contains(99) && activeCycle != null) {
+                    val curCycle = activeCycle
+                    if (block.mCodes.contains(99) && curCycle != null) {
                         currentZ = executeFixedCycle(
-                            cycle = activeCycle!!,
+                            cycle = curCycle,
                             callLine = block.lineNumber,
                             cx = currentX,
                             cy = currentY,
@@ -439,10 +497,13 @@ class KlartextInterpreter {
                 }
 
                 is KlartextBlock.LinearPolar -> {
-                    val angleRad = Math.toRadians(block.pa.toDouble()).toFloat()
-                    val targetX = circleCenterX + block.pr * cos(angleRad)
-                    val targetY = circleCenterY + block.pr * sin(angleRad)
-                    val targetZ = block.z?.plus(datumZ) ?: currentZ
+                    val rPR = resolveCoord(block.rawPR, block.pr, qParams) ?: block.pr
+                    val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
+                    val rZ = resolveCoord(block.rawZ, block.z, qParams)
+                    val angleRad = Math.toRadians(rPA.toDouble()).toFloat()
+                    val targetX = circleCenterX + rPR * cos(angleRad)
+                    val targetY = circleCenterY + rPR * sin(angleRad)
+                    val targetZ = rZ?.plus(datumZ) ?: currentZ
 
                     val movesXY = hypot(targetX - currentX, targetY - currentY) > 1e-4f
                     updateModalComp(block.explicitComp, block.lineNumber, movesXY && !block.isRapid)
@@ -463,9 +524,10 @@ class KlartextInterpreter {
                     currentY = targetY
                     currentZ = targetZ
 
-                    if (block.mCodes.contains(99) && activeCycle != null) {
+                    val curCycPolar = activeCycle
+                    if (block.mCodes.contains(99) && curCycPolar != null) {
                         currentZ = executeFixedCycle(
-                            activeCycle!!, block.lineNumber, currentX, currentY, currentZ, datumZ,
+                            curCycPolar, block.lineNumber, currentX, currentY, currentZ, datumZ,
                             stockMin, stockMax, activeTool, effectiveRadius, activeDl, activeDr,
                             currentFeed, currentSpeed, segments, diagnostics
                         )
@@ -475,20 +537,23 @@ class KlartextInterpreter {
                 is KlartextBlock.Circle -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
                     val start = Point3D(currentX, currentY, currentZ)
+                    val rx = resolveCoord(block.rawX, block.x, qParams)
+                    val ry = resolveCoord(block.rawY, block.y, qParams)
+                    val rz = resolveCoord(block.rawZ, block.z, qParams)
                     val targetX = when {
-                        block.x == null -> currentX
-                        block.isIncrementalX -> currentX + block.x
-                        else -> block.x + datumX
+                        rx == null -> currentX
+                        block.isIncrementalX -> currentX + rx
+                        else -> rx + datumX
                     }
                     val targetY = when {
-                        block.y == null -> currentY
-                        block.isIncrementalY -> currentY + block.y
-                        else -> block.y + datumY
+                        ry == null -> currentY
+                        block.isIncrementalY -> currentY + ry
+                        else -> ry + datumY
                     }
                     val targetZ = when {
-                        block.z == null -> currentZ
-                        block.isIncrementalZ -> currentZ + block.z
-                        else -> block.z + datumZ
+                        rz == null -> currentZ
+                        block.isIncrementalZ -> currentZ + rz
+                        else -> rz + datumZ
                     }
                     val end = Point3D(targetX, targetY, targetZ)
                     val center = Point2D(circleCenterX, circleCenterY)
@@ -533,10 +598,12 @@ class KlartextInterpreter {
                     val start = Point3D(currentX, currentY, currentZ)
                     val center = Point2D(circleCenterX, circleCenterY)
                     val r = hypot(start.x - center.x, start.y - center.y)
-                    val angleRad = Math.toRadians(block.pa.toDouble()).toFloat()
+                    val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
+                    val rZ = resolveCoord(block.rawZ, block.z, qParams)
+                    val angleRad = Math.toRadians(rPA.toDouble()).toFloat()
                     val targetX = center.x + r * cos(angleRad)
                     val targetY = center.y + r * sin(angleRad)
-                    val targetZ = block.z?.plus(datumZ) ?: currentZ
+                    val targetZ = rZ?.plus(datumZ) ?: currentZ
                     val end = Point3D(targetX, targetY, targetZ)
 
                     block.feedRate?.let { currentFeed = it }
@@ -559,11 +626,14 @@ class KlartextInterpreter {
                 is KlartextBlock.CircleRadius -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
                     val start = Point3D(currentX, currentY, currentZ)
-                    val targetX = if (block.isIncrementalX) currentX + (block.x ?: 0f) else (block.x?.plus(datumX) ?: currentX)
-                    val targetY = if (block.isIncrementalY) currentY + (block.y ?: 0f) else (block.y?.plus(datumY) ?: currentY)
+                    val rx = resolveCoord(block.rawX, block.x, qParams)
+                    val ry = resolveCoord(block.rawY, block.y, qParams)
+                    val rr = resolveCoord(block.rawRadius, block.radius, qParams) ?: block.radius
+                    val targetX = if (block.isIncrementalX) currentX + (rx ?: 0f) else (rx?.plus(datumX) ?: currentX)
+                    val targetY = if (block.isIncrementalY) currentY + (ry ?: 0f) else (ry?.plus(datumY) ?: currentY)
                     val end = Point3D(targetX, targetY, currentZ)
-                    val r = abs(block.radius)
-                    val longArc = block.radius < 0f
+                    val r = abs(rr)
+                    val longArc = rr < 0f
 
                     val center = calculateArcCenter(
                         Point2D(start.x, start.y),
@@ -595,9 +665,12 @@ class KlartextInterpreter {
                 is KlartextBlock.CircleTangential -> {
                     updateModalComp(block.explicitComp, block.lineNumber, true)
                     val start = Point3D(currentX, currentY, currentZ)
-                    val targetX = if (block.isIncrementalX) currentX + (block.x ?: 0f) else (block.x?.plus(datumX) ?: currentX)
-                    val targetY = if (block.isIncrementalY) currentY + (block.y ?: 0f) else (block.y?.plus(datumY) ?: currentY)
-                    val targetZ = block.z?.plus(datumZ) ?: currentZ
+                    val rx = resolveCoord(block.rawX, block.x, qParams)
+                    val ry = resolveCoord(block.rawY, block.y, qParams)
+                    val rz = resolveCoord(block.rawZ, block.z, qParams)
+                    val targetX = if (block.isIncrementalX) currentX + (rx ?: 0f) else (rx?.plus(datumX) ?: currentX)
+                    val targetY = if (block.isIncrementalY) currentY + (ry ?: 0f) else (ry?.plus(datumY) ?: currentY)
+                    val targetZ = rz?.plus(datumZ) ?: currentZ
                     val end = Point3D(targetX, targetY, targetZ)
 
                     val p1 = Point2D(start.x, start.y)
@@ -765,9 +838,10 @@ class KlartextInterpreter {
                 }
 
                 is KlartextBlock.CycleCall -> {
-                    if (activeCycle != null) {
+                    val curCycle = activeCycle
+                    if (curCycle != null) {
                         currentZ = executeFixedCycle(
-                            cycle = activeCycle!!,
+                            cycle = curCycle,
                             callLine = block.lineNumber,
                             cx = currentX,
                             cy = currentY,
@@ -812,6 +886,40 @@ class KlartextInterpreter {
                         } else {
                             val popped = callStack.removeAt(callStack.lastIndex)
                             pc = popped.returnPc
+                        }
+                    }
+                }
+
+                is KlartextBlock.QParamAssignment -> {
+                    val res = QExpressionEvaluator.evaluate(block.expression, qParams)
+                    qParams[block.targetQ] = res
+                }
+
+                is KlartextBlock.QParamConditionalJump -> {
+                    val val1 = QExpressionEvaluator.evaluate(block.operand1, qParams)
+                    val val2 = QExpressionEvaluator.evaluate(block.operand2, qParams)
+                    val conditionMet = when (block.condition.uppercase(Locale.ROOT)) {
+                        "EQU" -> abs(val1 - val2) < 1e-4f
+                        "NE" -> abs(val1 - val2) >= 1e-4f
+                        "GT" -> (val1 - val2) > 1e-4f
+                        "LT" -> (val2 - val1) > 1e-4f
+                        else -> false
+                    }
+                    if (conditionMet) {
+                        val targetPc = labelMapByName[block.targetLabelName.lowercase(Locale.ROOT)]
+                            ?: labelMapByNumber[block.targetLabelNum]
+                        if (targetPc != null) {
+                            pc = targetPc
+                        } else {
+                            diagnostics.add(
+                                TncDiagnostic(
+                                    lineNumber = block.lineNumber,
+                                    severity = DiagnosticSeverity.ERROR,
+                                    code = TncErrorCode.LABEL_NOT_FOUND,
+                                    title = "Label niet gevonden",
+                                    message = "Fout op regel ${block.lineNumber}: Label '${block.targetLabelName}' niet gevonden voor sprong"
+                                )
+                            )
                         }
                     }
                 }

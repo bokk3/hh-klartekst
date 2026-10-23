@@ -343,11 +343,60 @@ object SamplePrograms {
         10 END PGM FOUT_CYCLUS208 MM
     """.trimIndent()
 
+    /**
+     * 8. PARAMETRISCH_ELLIPS_Q.H:
+     * Volledig parametrisch geprogrammeerde ellips via TNC 640 Q-parameters:
+     * - Q1 = Halve lange as A (50 mm)
+     * - Q2 = Halve korte as B (30 mm)
+     * - Q3 = Start-hoek phi in graden (0..360)
+     * - Q4 = Stapgrootte d_phi (5 graden)
+     * - FN 6 (SIN), FN 7 (COS), FN 3 (MULTIPLY), FN 1 (ADD)
+     * - FN 12: IF +Q3 LT +365 GOTO LBL "ELLIPSLUS"
+     */
+    val demoParametricEllipse = """
+        0 BEGIN PGM PARAMETRISCH_ELLIPS_Q MM
+        1 ; --- RUWDEEL DEFINITIE ---
+        2 BLK FORM 0.1 Z X-75 Y-75 Z-20
+        3 BLK FORM 0.2 X+75 Y+75 Z+0
+        4 ; ===================================================
+        5 ; PARAMETRISCHE ELLIPS VIA Q-PARAMETERS & FN 6/7/12
+        6 ; Q1 = Halve lange as A (50 mm)
+        7 ; Q2 = Halve korte as B (30 mm)
+        8 ; Q3 = Start-hoek phi in graden (0..360)
+        9 ; Q4 = Stapgrootte d_phi (5 graden)
+        10 ; ===================================================
+        11 FN 0: Q1 = +50
+        12 FN 0: Q2 = +30
+        13 FN 0: Q3 = +0
+        14 FN 0: Q4 = +5
+        15 TOOL CALL "FREES10" Z S3500 F800
+        16 L Z+50 R0 FMAX
+        17 ; Bereken startpositie bij hoek 0: X = A * COS(0) = 50, Y = B * SIN(0) = 0
+        18 FN 7: Q10 = COS +Q3
+        19 FN 3: Q10 = +Q10 * +Q1
+        20 FN 6: Q11 = SIN +Q3
+        21 FN 3: Q11 = +Q11 * +Q2
+        22 L X+Q10 Y+Q11 R0 FMAX
+        23 L Z-5 R0 F400 M3
+        24 ; --- ITERATIEVE LUS VOOR ELLIPS PUNTEN ---
+        25 LBL "ELLIPSLUS"
+        26 FN 7: Q10 = COS +Q3
+        27 FN 3: Q10 = +Q10 * +Q1
+        28 FN 6: Q11 = SIN +Q3
+        29 FN 3: Q11 = +Q11 * +Q2
+        30 L X+Q10 Y+Q11 R0 F800
+        31 FN 1: Q3 = +Q3 + +Q4
+        32 FN 12: IF +Q3 LT +365 GOTO LBL "ELLIPSLUS"
+        33 L Z+50 R0 FMAX M30
+        34 END PGM PARAMETRISCH_ELLIPS_Q MM
+    """.trimIndent()
+
     val all: List<Pair<String, String>> = listOf(
         "CONTOURFREZEN_V4.H (Omtrek & Ontbramen)" to contourfrezenV4,
         "BOOR_FREESCYCLI.H (Vlakken, Kamers, Sleuf)" to boorFreescycli,
         "KAMERSFREZEN_H5.H (Kamers & 3x M8 Tappen)" to kamersfrezenH5,
         "U_VORM_LABEL.H (Nulpunt Cyclus 7 & Boorfrees 208)" to uVormLabel,
+        "PARAMETRISCH_ELLIPS_Q.H (Q-Parameters & FN 12 Lus)" to demoParametricEllipse,
         "FOUTDEMO: R0 vs. RL Valkuil" to demoR0Pitfall,
         "FOUTDEMO: Gereedschapsradius te groot" to demoRadiusTooLarge,
         "FOUTDEMO: Cyclus 208 Te grote diameter" to demoCycle208TooLarge

@@ -65,6 +65,7 @@ class SimulatorViewModel : ViewModel() {
                 segments = result.segments,
                 diagnostics = result.diagnostics,
                 stock = result.stock,
+                qParameters = result.qParameters,
                 machineState = initialMachineState,
                 isPlaying = false,
                 activeDialog = null
@@ -210,8 +211,20 @@ class SimulatorViewModel : ViewModel() {
     fun openToolTable() { _uiState.update { it.copy(showToolTableDialog = true) } }
     fun closeToolTable() { _uiState.update { it.copy(showToolTableDialog = false) } }
 
+    fun openQParamDialog() { _uiState.update { it.copy(showQParamDialog = true) } }
+    fun closeQParamDialog() { _uiState.update { it.copy(showQParamDialog = false) } }
+
     fun openImportExport() { _uiState.update { it.copy(showImportExportDialog = true) } }
     fun closeImportExport() { _uiState.update { it.copy(showImportExportDialog = false) } }
+
+    fun toggleSectionPlane() {
+        val next = if (_uiState.value.sectionPlane == SectionPlane.X_AXIS) SectionPlane.Y_AXIS else SectionPlane.X_AXIS
+        _uiState.update { it.copy(sectionPlane = next) }
+    }
+
+    fun toggleToolHolder() {
+        _uiState.update { it.copy(showToolHolder = !it.showToolHolder) }
+    }
 
     // --- TNC 640 Interactive Keypad Dialog Session ---
 
