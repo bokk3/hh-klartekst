@@ -109,6 +109,7 @@ sealed class ToolpathSegment {
     abstract val dl: Float
     abstract val dr: Float
     abstract val toolGeometry: ToolGeometryType
+    abstract val toolCornerRadius: Float
     abstract val pointAngleDeg: Float
     abstract val radiusComp: RadiusComp
 
@@ -128,6 +129,7 @@ sealed class ToolpathSegment {
         override val dl: Float = 0f,
         override val dr: Float = 0f,
         override val toolGeometry: ToolGeometryType = ToolGeometryType.CYLINDRICAL_ENDMILL,
+        override val toolCornerRadius: Float = 0f,
         override val pointAngleDeg: Float = 180f,
         override val radiusComp: RadiusComp = RadiusComp.R0
     ) : ToolpathSegment()
@@ -148,6 +150,7 @@ sealed class ToolpathSegment {
         override val dl: Float = 0f,
         override val dr: Float = 0f,
         override val toolGeometry: ToolGeometryType = ToolGeometryType.CYLINDRICAL_ENDMILL,
+        override val toolCornerRadius: Float = 0f,
         override val pointAngleDeg: Float = 180f,
         override val radiusComp: RadiusComp = RadiusComp.R0,
         val center: Point2D,

@@ -239,6 +239,35 @@ class SimulatorViewModel : ViewModel() {
         pause()
     }
 
+    fun setMachinePreset(preset: MachinePreset) {
+        ToolTable.activePreset = preset
+        _uiState.update { it.copy(machinePreset = preset) }
+    }
+
+    fun selectActiveTool(tool: TncTool) {
+        val curState = _uiState.value.machineState
+        val effRadius = (tool.radius + curState.dr).coerceAtLeast(0.1f)
+        _uiState.update {
+            it.copy(
+                machineState = curState.copy(
+                    activeTool = tool.number,
+                    toolName = tool.name,
+                    toolRadius = tool.radius,
+                    effectiveRadius = effRadius,
+                    spindleSpeed = tool.recommendedRpm.toFloat() * (it.spindleOverride / 100f),
+                    feedRate = tool.recommendedFeed.toFloat() * (it.feedOverride / 100f),
+                    spindleOn = true
+                )
+            )
+        }
+    }
+
+    fun insertToolCall(tool: TncTool) {
+        val toolCallLine = "TOOL CALL \"${tool.name}\" Z S${tool.recommendedRpm} F${tool.recommendedFeed}"
+        insertLineIntoProgram(toolCallLine)
+        selectActiveTool(tool)
+    }
+
     fun navigateCodeLine(delta: Int) {
         val currentLine = _uiState.value.machineState.activeLineNumber
         val blockLines = _uiState.value.blocks.map { it.lineNumber }

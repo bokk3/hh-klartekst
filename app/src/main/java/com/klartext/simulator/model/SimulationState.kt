@@ -106,5 +106,6 @@ data class SimulationUiState(
     val feedOverride: Int = 100,
     val spindleOverride: Int = 100,
     val isConsoleTwinScreen: Boolean? = null,
-    val isSingleBlockActive: Boolean = false
+    val isSingleBlockActive: Boolean = false,
+    val machinePreset: MachinePreset = MachinePreset.DMU_50
 )

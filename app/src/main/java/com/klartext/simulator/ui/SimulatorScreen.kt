@@ -250,7 +250,13 @@ fun SimulatorScreen(
     }
 
     if (uiState.showToolTableDialog) {
-        ToolTableDialog(onDismiss = { viewModel.closeToolTable() })
+        ToolTableDialog(
+            activePreset = uiState.machinePreset,
+            onSelectPreset = { preset -> viewModel.setMachinePreset(preset) },
+            onSelectTool = { tool -> viewModel.selectActiveTool(tool) },
+            onInsertToolCall = { tool -> viewModel.insertToolCall(tool) },
+            onDismiss = { viewModel.closeToolTable() }
+        )
     }
 
     if (uiState.showQParamDialog) {

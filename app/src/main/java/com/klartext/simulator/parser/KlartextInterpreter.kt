@@ -239,6 +239,7 @@ class KlartextInterpreter {
                         dl = activeDl,
                         dr = activeDr,
                         toolGeometry = activeTool.geometryType,
+                        toolCornerRadius = activeTool.cornerRadius,
                         pointAngleDeg = activeTool.pointAngleDeg,
                         radiusComp = comp
                     )
@@ -271,6 +272,7 @@ class KlartextInterpreter {
                         dl = activeDl,
                         dr = activeDr,
                         toolGeometry = activeTool.geometryType,
+                        toolCornerRadius = activeTool.cornerRadius,
                         pointAngleDeg = activeTool.pointAngleDeg,
                         radiusComp = comp
                     )
@@ -355,6 +357,7 @@ class KlartextInterpreter {
                     dl = activeDl,
                     dr = activeDr,
                     toolGeometry = activeTool.geometryType,
+                    toolCornerRadius = activeTool.cornerRadius,
                     pointAngleDeg = activeTool.pointAngleDeg,
                     radiusComp = comp,
                     center = center,

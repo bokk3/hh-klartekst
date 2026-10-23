@@ -115,6 +115,7 @@ object ZMapSimulator {
                 toolRadius = seg.toolRadius,
                 dl = seg.dl,
                 geometry = seg.toolGeometry,
+                toolCornerRadius = seg.toolCornerRadius,
                 heights = heights,
                 cols = cols,
                 rows = rows,
@@ -164,6 +165,7 @@ object ZMapSimulator {
                 toolRadius = seg.toolRadius,
                 dl = seg.dl,
                 geometry = seg.toolGeometry,
+                toolCornerRadius = seg.toolCornerRadius,
                 heights = heights,
                 cols = cols,
                 rows = rows,
@@ -183,6 +185,7 @@ object ZMapSimulator {
         toolRadius: Float,
         dl: Float,
         geometry: ToolGeometryType,
+        toolCornerRadius: Float = 0f,
         heights: FloatArray,
         cols: Int,
         rows: Int,
@@ -220,8 +223,26 @@ object ZMapSimulator {
                             val r = sqrt(dSq)
                             zTipPhysical + r
                         }
+                        ToolGeometryType.BALL_NOSE -> {
+                            // Ball nose: spherical tip with radius rTool
+                            val radDiff = max(0f, rSq - dSq)
+                            zTipPhysical + (rTool - sqrt(radDiff))
+                        }
+                        ToolGeometryType.TORUS_MILL -> {
+                            // Torus mill with corner radius Rc
+                            val rc = toolCornerRadius.coerceIn(0.5f, rTool)
+                            val rFlat = rTool - rc
+                            val rDist = sqrt(dSq)
+                            if (rDist <= rFlat) {
+                                zTipPhysical
+                            } else {
+                                val deltaR = rDist - rFlat
+                                val radDiff = max(0f, rc * rc - deltaR * deltaR)
+                                zTipPhysical + (rc - sqrt(radDiff))
+                            }
+                        }
                         else -> {
-                            // Flat cylindrical endmill / drill / tap
+                            // Flat cylindrical endmill / face mill / drill / tap
                             zTipPhysical
                         }
                     }.coerceAtLeast(stockMinZ - 5f)
