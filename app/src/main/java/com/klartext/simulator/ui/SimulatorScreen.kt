@@ -31,7 +31,17 @@ fun SimulatorScreen(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val screenWidthDp = configuration.screenWidthDp
-    val isTwinScreen = uiState.isConsoleTwinScreen ?: (isLandscape || screenWidthDp >= 640)
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+
+    // On phones (smallestScreenWidthDp < 600), twin-screen mode is false by default so the simulation is large and clear.
+    // Tablets (smallestScreenWidthDp >= 600) default to twin-screen in landscape or wide displays.
+    val isTwinScreen = uiState.isConsoleTwinScreen ?: (isTablet && screenWidthDp >= 840)
+
+    val modeTag = when {
+        isTwinScreen -> "[TWIN-SCREEN TABLET]"
+        isLandscape -> "[BREEDBEELD SIM]"
+        else -> "[PORTRET COMPACT]"
+    }
 
     Scaffold(
         topBar = {
@@ -44,7 +54,7 @@ fun SimulatorScreen(
                             color = CncAccentOrange
                         )
                         Text(
-                            text = "${uiState.programName} ${if (isTwinScreen) "[CONSOLE TWIN-SCREEN]" else "[COMPACT]"} • ${if (uiState.consoleTheme == ConsoleTheme.CLASSIC_TNC640) "KLASSIEK" else "HYPERMODERN"}",
+                            text = "${uiState.programName} $modeTag • ${if (uiState.consoleTheme == ConsoleTheme.CLASSIC_TNC640) "KLASSIEK" else "HYPERMODERN"}",
                             fontSize = 10.sp,
                             color = CncTextSecondary
                         )
@@ -130,6 +140,38 @@ fun SimulatorScreen(
         ) {
             if (isTwinScreen) {
                 TwinScreenConsoleView(
+                    uiState = uiState,
+                    onLineClick = { line -> viewModel.seekToLine(line) },
+                    onViewModeChange = { mode -> viewModel.setViewMode(mode) },
+                    onToggleContour = { viewModel.toggleProgrammedContour() },
+                    onToggleSectionPlane = { viewModel.toggleSectionPlane() },
+                    onToggleToolHolder = { viewModel.toggleToolHolder() },
+                    onToggleConsoleTheme = { viewModel.toggleConsoleTheme() },
+                    onFeedOverrideChange = { ov -> viewModel.setFeedOverride(ov) },
+                    onSpindleOverrideChange = { ov -> viewModel.setSpindleOverride(ov) },
+                    onNcStart = { viewModel.ncStart() },
+                    onNcStop = { viewModel.ncStop() },
+                    onToggleSingleBlock = { viewModel.toggleSingleBlock() },
+                    onReset = { viewModel.reset() },
+                    onStartCommand = { cmd -> viewModel.startCommand(cmd) },
+                    onDialogChar = { ch -> viewModel.onDialogChar(ch) },
+                    onDialogEnt = { viewModel.onDialogEnt() },
+                    onDialogNoEnt = { viewModel.onDialogNoEnt() },
+                    onDialogDel = { viewModel.onDialogDel() },
+                    onDialogEnd = { viewModel.onDialogEnd() },
+                    onNavigateLine = { delta -> viewModel.navigateCodeLine(delta) },
+                    onOpenCalculator = { viewModel.openCalculator() },
+                    onOpenDiagnostics = { viewModel.openDiagnostics() },
+                    onOpenToolTable = { viewModel.openToolTable() },
+                    onOpenQParams = { viewModel.openQParamDialog() },
+                    onOpenImportExport = { viewModel.openImportExport() },
+                    onCopyLine = { viewModel.copyCurrentLine() },
+                    onPasteLine = { viewModel.pasteLine() },
+                    onDeleteLine = { viewModel.deleteCurrentLine() }
+                )
+            } else if (isLandscape) {
+                // Phone Landscape: Hero Simulation Canvas (62% width) + Tabbed Deck (Code / Console / Overrides)
+                PhoneLandscapeView(
                     uiState = uiState,
                     onLineClick = { line -> viewModel.seekToLine(line) },
                     onViewModeChange = { mode -> viewModel.setViewMode(mode) },
