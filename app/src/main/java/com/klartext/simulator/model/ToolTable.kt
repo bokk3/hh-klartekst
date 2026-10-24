@@ -131,6 +131,15 @@ object ToolTable {
         TncTool(11, "KANTENFREES6", 6.0f, 60f, ToolGeometryType.CHAMFER_MILL_45, pointAngleDeg = 90f, teeth = 4, description = "Kantenfrees 45° (90° punt) Ø6 mm", holder = ToolHolder("SK40", 22f, 22f, 63f, 45f))
     )
 
+    // --- 4. HEIDENHAIN CURRICULUM TRAINING TOOLS (Oefening 1 t/m 5) ---
+    val heidenhainTrainingTools: List<TncTool> = listOf(
+        TncTool(5, "FREES10", 10.0f, 80f, ToolGeometryType.CYLINDRICAL_ENDMILL, teeth = 4, description = "Vingerfrees Ø10mm (Oefening 1 & 4)"),
+        TncTool(8, "FREES16", 16.0f, 90f, ToolGeometryType.CYLINDRICAL_ENDMILL, teeth = 4, description = "VHM Schachtfrees Ø16mm (Oefening 3)"),
+        TncTool(10, "FREES20", 20.0f, 100f, ToolGeometryType.CYLINDRICAL_ENDMILL, teeth = 4, description = "VHM Schachtfrees Ø20mm (Oefening 2)"),
+        TncTool(229, "VHMBOOR6.8", 6.8f, 85f, ToolGeometryType.TWIST_DRILL, pointAngleDeg = 140f, teeth = 2, description = "VHM Kerngatboor Ø6.8mm (Oefening 5)"),
+        TncTool(264, "TAP_M8", 8.0f, 85f, ToolGeometryType.TAP, pitchMm = 1.25f, teeth = 3, description = "Synchroontap M8 (Oefening 5)")
+    )
+
     // Default list exposed to UI and interpreter
     var activePreset: MachinePreset = MachinePreset.DMU_50
     val defaultTools: List<TncTool> get() = when (activePreset) {
@@ -141,6 +150,7 @@ object ToolTable {
 
     fun findByNumber(number: Int): TncTool? {
         return defaultTools.firstOrNull { it.number == number }
+            ?: heidenhainTrainingTools.firstOrNull { it.number == number }
             ?: dmu50Tools.firstOrNull { it.number == number }
             ?: dvf5000Tools.firstOrNull { it.number == number }
             ?: standardTools.firstOrNull { it.number == number }
@@ -152,7 +162,7 @@ object ToolTable {
         defaultTools.firstOrNull { it.name.uppercase(Locale.ROOT) == clean }?.let { return it }
 
         // Search all catalogs
-        val allCatalogs = dmu50Tools + dvf5000Tools + standardTools
+        val allCatalogs = defaultTools + heidenhainTrainingTools + dmu50Tools + dvf5000Tools + standardTools
         allCatalogs.firstOrNull { it.name.uppercase(Locale.ROOT) == clean }?.let { return it }
 
         // Flexible prefix / substring matching (e.g. "FREES16" matches "FREES16_VHM")

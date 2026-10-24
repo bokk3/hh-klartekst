@@ -497,4 +497,65 @@ class KlartextParserTest {
         assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
         assertTrue(result.segments.isNotEmpty())
     }
+
+    @Test
+    fun testOefening1Pentagon() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.oefening1Pentagon)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertTrue("Pentagon toolpath must generate segments", result.segments.isNotEmpty())
+        // Verify final position is safety clearance at (150, 150, 100)
+        assertEquals(150f, result.finalState.x, 0.1f)
+        assertEquals(150f, result.finalState.y, 0.1f)
+        assertEquals(100f, result.finalState.z, 0.1f)
+    }
+
+    @Test
+    fun testOefening2RuitApprDep() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.oefening2Ruit)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        assertTrue("Ruit toolpath must generate segments", result.segments.isNotEmpty())
+        // APPR LT and DEP LT should produce feed moves with RL and return to R0
+        val feedSegments = result.segments.filter { it.moveType == MoveType.FEED }
+        assertTrue("Should have at least 6 feed segments", feedSegments.size >= 6)
+    }
+
+    @Test
+    fun testOefening3BoogContour() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.oefening3Boog)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        val arcs = result.segments.filterIsInstance<ToolpathSegment.Arc>()
+        assertEquals("Should have exactly 1 circular arc segment", 1, arcs.size)
+        assertEquals(25f, arcs[0].center.x, 0.1f)
+        assertEquals(25f, arcs[0].center.y, 0.1f)
+        assertEquals(Direction.CCW, arcs[0].direction) // DR+ is counter-clockwise
+    }
+
+    @Test
+    fun testOefening4BewerkingsCycli() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.oefening4Cycli)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        // Cycles 251, 252, 253 should all have executed plunging and pocketing moves
+        val plungeMoves = result.segments.filter { it.moveType == MoveType.PLUNGE }
+        assertTrue("Cycles should generate multiple plunge moves", plungeMoves.size >= 3)
+    }
+
+    @Test
+    fun testOefening5BorenTappenSubprogramsAndRepeats() {
+        val blocks = KlartextParser.parseProgram(SamplePrograms.oefening5BorenTappen)
+        val result = KlartextInterpreter().interpret(blocks)
+
+        assertEquals(0, result.diagnostics.count { it.severity == DiagnosticSeverity.ERROR })
+        // 22 holes per tool: 8 (LBL 10 with REP 7) + 8 (LBL 11 with REP 7) + 6 (LBL 12 with REP 5) = 22 holes
+        // 2 tools: T229 (Drill) + T264 (Tap) = 44 total cycle calls!
+        val plungeMoves = result.segments.filter { it.moveType == MoveType.PLUNGE }
+        assertEquals("Should execute exactly 44 hole plunges (22 drill + 22 tap)", 44, plungeMoves.size)
+    }
 }

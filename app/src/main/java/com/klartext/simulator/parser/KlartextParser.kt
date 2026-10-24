@@ -270,8 +270,8 @@ object KlartextParser {
                 KlartextBlock.LinearPolar(
                     lineNumber = lineNum,
                     rawText = line,
-                    pr = prVal?.first ?: 0f,
-                    pa = paVal?.first ?: 0f,
+                    pr = prVal?.first,
+                    pa = paVal?.first,
                     z = zVal?.first,
                     rawPR = rawPRVal?.first,
                     rawPA = rawPAVal?.first,
@@ -465,11 +465,12 @@ object KlartextParser {
                     labelName = tok.lowercase(Locale.ROOT)
                     lblNum = tok.toIntOrNull() ?: labelName.hashCode()
                 }
-                val rep = if (upper.contains("REP")) {
+                val hasRep = upper.contains("REP")
+                val rep = if (hasRep) {
                     val repPart = upper.substringAfter("REP").trim().split("\\s+|/".toRegex()).firstOrNull()
                     repPart?.toIntOrNull() ?: 1
                 } else 1
-                KlartextBlock.LabelCall(lineNum, line, lblNum, labelName, rep)
+                KlartextBlock.LabelCall(lineNum, line, lblNum, labelName, rep, isRepeat = hasRep)
             }
 
             upper.startsWith("CYCL DEF") -> {

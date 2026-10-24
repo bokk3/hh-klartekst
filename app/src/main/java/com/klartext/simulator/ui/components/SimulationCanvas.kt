@@ -568,7 +568,7 @@ private fun projectPoint(
 
             // 3. Rotate around X (Pitch / A-axis)
             val sx = x2
-            val sy = y2 * sinP - z2 * cosP
+            val sy = y2 * sinP + z2 * cosP
 
             Offset(center.x + sx * scale, center.y - sy * scale)
         }

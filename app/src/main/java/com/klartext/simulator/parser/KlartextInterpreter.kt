@@ -71,6 +71,7 @@ class KlartextInterpreter {
 
         val segments = mutableListOf<ToolpathSegment>()
         val callStack = mutableListOf<CallFrame>()
+        val sectionRepeatCounters = mutableMapOf<Int, Int>()
         var pc = 0
         var loopBudget = 15000
 
@@ -661,6 +662,14 @@ class KlartextInterpreter {
                             feed = currentFeed,
                             comp = effectiveComp
                         )
+                    } else if (block.apprType == ApprDepType.LT && block.len != null && block.len > 0.1f) {
+                        val pH = targetPt - contourDir * block.len
+                        val startPt3D = Point3D(currentX, currentY, currentZ)
+                        val pH3D = Point3D(pH.x, pH.y, targetZ)
+                        addLinearSegment(block.lineNumber, startPt3D, pH3D, MoveType.FEED, currentFeed, effectiveComp)
+
+                        val target3D = Point3D(targetX, targetY, targetZ)
+                        addLinearSegment(block.lineNumber, pH3D, target3D, MoveType.FEED, currentFeed, effectiveComp)
                     } else {
                         lastTangent = contourDir
                         val progStart = Point3D(currentX, currentY, currentZ)
@@ -773,16 +782,38 @@ class KlartextInterpreter {
                     if (block.mCodes.contains(99) && curCycle != null) {
                         dispatchCycleCall(curCycle, block.lineNumber)
                     }
+
+                    if ((block.mCodes.contains(30) || block.mCodes.contains(2)) && callStack.isEmpty()) {
+                        break
+                    }
                 }
 
                 is KlartextBlock.LinearPolar -> {
                     val rPR = resolveCoord(block.rawPR, block.pr, qParams) ?: block.pr
                     val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
                     val rZ = resolveCoord(block.rawZ, block.z, qParams)
-                    val effectivePA = if (isOddMirror()) -(rPA + rotAngleDeg) else (rPA + rotAngleDeg)
+
+                    val dx = currentX - circleCenterX
+                    val dy = currentY - circleCenterY
+                    val curRadius = hypot(dx, dy)
+                    val curAngleDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+
+                    val targetRadius = when {
+                        block.isIncrementalPR -> curRadius + (rPR ?: 0f)
+                        rPR != null -> rPR
+                        else -> curRadius
+                    }
+
+                    val baseAngle = when {
+                        block.isIncrementalPA -> curAngleDeg + (rPA ?: 0f)
+                        rPA != null -> rPA
+                        else -> curAngleDeg
+                    }
+
+                    val effectivePA = if (isOddMirror()) -(baseAngle + rotAngleDeg) else (baseAngle + rotAngleDeg)
                     val angleRad = Math.toRadians(effectivePA.toDouble()).toFloat()
-                    val targetX = circleCenterX + rPR * cos(angleRad)
-                    val targetY = circleCenterY + rPR * sin(angleRad)
+                    val targetX = circleCenterX + targetRadius * cos(angleRad)
+                    val targetY = circleCenterY + targetRadius * sin(angleRad)
                     val targetZ = rZ?.plus(datumZ) ?: currentZ
 
                     val movesXY = hypot(targetX - currentX, targetY - currentY) > 1e-4f
@@ -808,6 +839,10 @@ class KlartextInterpreter {
                     val curCycPolar = activeCycle
                     if (block.mCodes.contains(99) && curCycPolar != null) {
                         dispatchCycleCall(curCycPolar, block.lineNumber)
+                    }
+
+                    if ((block.mCodes.contains(30) || block.mCodes.contains(2)) && callStack.isEmpty()) {
+                        break
                     }
                 }
 
@@ -878,7 +913,9 @@ class KlartextInterpreter {
                     val r = hypot(start.x - center.x, start.y - center.y)
                     val rPA = resolveCoord(block.rawPA, block.pa, qParams) ?: block.pa
                     val rZ = resolveCoord(block.rawZ, block.z, qParams)
-                    val effectivePA = if (isOddMirror()) -(rPA + rotAngleDeg) else (rPA + rotAngleDeg)
+                    val curA = Math.toDegrees(atan2((currentY - circleCenterY).toDouble(), (currentX - circleCenterX).toDouble())).toFloat()
+                    val baseAngle = if (block.isIncrementalPA) curA + rPA else rPA
+                    val effectivePA = if (isOddMirror()) -(baseAngle + rotAngleDeg) else (baseAngle + rotAngleDeg)
                     val angleRad = Math.toRadians(effectivePA.toDouble()).toFloat()
                     val targetX = center.x + r * cos(angleRad)
                     val targetY = center.y + r * sin(angleRad)
@@ -1168,15 +1205,27 @@ class KlartextInterpreter {
                     val targetPc = labelMapByName[block.labelName.lowercase()]
                         ?: labelMapByNumber[block.labelNumber]
                     if (targetPc != null) {
-                        val remainingReps = (block.repeatCount - 1).coerceAtLeast(0)
-                        callStack.add(
-                            CallFrame(
-                                returnPc = pc,
-                                labelPc = targetPc,
-                                remainingReps = remainingReps
+                        if (block.isRepeat && targetPc < pc) {
+                            // Program section repeat (loop backward)
+                            val currentRemaining = sectionRepeatCounters.getOrPut(pc) { block.repeatCount }
+                            if (currentRemaining > 0) {
+                                sectionRepeatCounters[pc] = currentRemaining - 1
+                                pc = targetPc
+                            } else {
+                                sectionRepeatCounters.remove(pc)
+                            }
+                        } else {
+                            // Subprogram call
+                            val remainingReps = if (block.isRepeat) (block.repeatCount - 1).coerceAtLeast(0) else 0
+                            callStack.add(
+                                CallFrame(
+                                    returnPc = pc,
+                                    labelPc = targetPc,
+                                    remainingReps = remainingReps
+                                )
                             )
-                        )
-                        pc = targetPc
+                            pc = targetPc
+                        }
                     }
                 }
 
@@ -1238,6 +1287,16 @@ class KlartextInterpreter {
                         else -> v1
                     }
                     qParams[block.targetQ] = res
+                }
+
+                is KlartextBlock.Stop -> {
+                    if ((block.mCode == 30 || block.mCode == 2 || block.mCode == null) && callStack.isEmpty()) {
+                        break
+                    }
+                }
+
+                is KlartextBlock.EndPgm -> {
+                    break
                 }
 
                 else -> Unit

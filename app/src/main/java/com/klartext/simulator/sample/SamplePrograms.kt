@@ -3,6 +3,244 @@ package com.klartext.simulator.sample
 object SamplePrograms {
 
     /**
+     * OEFENING 1: Tekening 1226651
+     * Sleuffrezen van een regelmatige vijfhoek met vingerfrees T5 (Ø10mm) op de hartlijn (R0).
+     * Gebruikt polaire coördinaten met de pool-verplaatsingstruc: telkens een lege CC op het hoekpunt
+     * gevolgd door LP PR+40 PA met hoekstappen van 72°.
+     */
+    val oefening1Pentagon = """
+        0 BEGIN PGM 1226651 MM
+        1 BLK FORM 0.1 Z X+0 Y+0 Z-16
+        2 BLK FORM 0.2 X+100 Y+100 Z+0
+        3 TOOL CALL 5 Z S8900 F1100
+        4 L Z+100 R0 FMAX M3
+        5 L X+50 Y+20 R0 FMAX
+        6 L Z+5 R0 FMAX M8
+        7 L Z-5 R0 F1100
+        8 L X+30 Y+20 R0 F1100
+        9 CC
+        10 LP PR+40 PA+108 R0
+        11 CC
+        12 LP PR+40 PA+36 R0
+        13 CC
+        14 LP PR+40 PA-36 R0
+        15 CC
+        16 LP PR+40 PA-108 R0
+        17 L X+50 Y+20 R0
+        18 L Z+5 R0 F2000 M9
+        19 L X+150 Y+150 Z+100 R0 FMAX M30
+        20 END PGM 1226651 MM
+    """.trimIndent()
+
+    /**
+     * OEFENING 2: Tekening 1206129
+     * Buitencontourfrezen van een ruitvormig eiland (symetrisch 25/75mm) met T10 (Ø20mm, RL).
+     * Gebruikt APPR LT LEN20 voor vloeiende aanzet en DEP LT LEN20 voor tangentieel verlaten.
+     */
+    val oefening2Ruit = """
+        0 BEGIN PGM 1206129 MM
+        1 BLK FORM 0.1 Z X+0 Y+0 Z-20
+        2 BLK FORM 0.2 X+100 Y+100 Z+0
+        3 TOOL CALL 10 Z S4500 F1100
+        4 L Z+100 R0 FMAX M3
+        5 L X-20 Y+20 R0 FMAX
+        6 L Z+5 R0 FMAX M8
+        7 L Z-5 R0 F1100
+        8 APPR LT X+0 Y+25 LEN20 RL F1100
+        9 L X+25 Y+100
+        10 L X+100 Y+75
+        11 L X+75 Y+0
+        12 L X+0 Y+25
+        13 DEP LT LEN20 F2000
+        14 L Z+5 R0 F2000 M9
+        15 L X+150 Y+150 Z+100 R0 FMAX M30
+        16 END PGM 1206129 MM
+    """.trimIndent()
+
+    /**
+     * OEFENING 3: Tekening 1214098
+     * Ronde baanfuncties met cirkelmiddelpunt CC X+25 Y+25 en cirkelboog C X+10 Y+36 DR+ (tegen de klok in).
+     * Gebruikt frees T8 (Ø16mm, RL meelopend), APPR LT en DEP LT LEN20 naar Y+120.
+     */
+    val oefening3Boog = """
+        0 BEGIN PGM 1214098 MM
+        1 BLK FORM 0.1 Z X+0 Y+0 Z-16
+        2 BLK FORM 0.2 X+100 Y+100 Z+0
+        3 TOOL CALL 8 Z S5600 F1600
+        4 L Z+100 R0 FMAX M3
+        5 L X-20 Y-20 R0 FMAX
+        6 L Z+5 R0 FMAX M8
+        7 L Z-5 R0 F1600
+        8 APPR LT X+10 Y+0 LEN20 RL F1600
+        9 L Y+14
+        10 CC X+25 Y+25
+        11 C X+10 Y+36 DR+
+        12 L Y+100
+        13 DEP LT LEN20 F2000
+        14 L Z+5 R0 F2000 M9
+        15 L X+150 Y+150 Z+100 R0 FMAX M30
+        16 END PGM 1214098 MM
+    """.trimIndent()
+
+    /**
+     * OEFENING 4: Tekening 1214155
+     * Vaste bewerkingscycli met frees T5:
+     * - Cyclus 251 (Rechthoekige kamer 70x20 R6, rotatie 90°)
+     * - Cyclus 252 (Ronde kamer Ø30mm spiraalvormig)
+     * - Cyclus 253 (Sleuffrezen 50x12mm onder 20° hoek)
+     * Aangeroepen op posities via M99.
+     */
+    val oefening4Cycli = """
+        0 BEGIN PGM 1214155 MM
+        1 BLK FORM 0.1 Z X+0 Y+0 Z-16
+        2 BLK FORM 0.2 X+100 Y+100 Z+0
+        3 TOOL CALL 5 Z S8900 F1100
+        4 L Z+100 R0 FMAX M3
+        5 L X+150 Y+150 R0 FMAX
+        6 CYCL DEF 251 RECHTHOEKIGE KAMER ~
+            Q215=+0    ;BEWERKINGSOMVANG ~
+            Q218=+70   ;1E ZIJDELENGTE ~
+            Q219=+20   ;2E ZIJDELENGTE ~
+            Q220=+6    ;HOEKRADIUS ~
+            Q368=+0.2  ;OVERMAAT ZIJKANT ~
+            Q224=+90   ;ROTATIEPOSITIE ~
+            Q367=+0    ;KAMERPOSITIE ~
+            Q207=+1100 ;AANZET FREZEN ~
+            Q351=+1    ;FREESWIJZE ~
+            Q201=-5    ;DIEPTE ~
+            Q202=+5    ;DIEPTEVERPLAATSING ~
+            Q369=+0.1  ;OVERMAAT DIEPTE ~
+            Q206=+1100 ;AANZET DIEPTEVERPL. ~
+            Q338=+5    ;VERPLAATSING NABEW. ~
+            Q200=+5    ;VEILIGHEIDSAFSTAND ~
+            Q203=+0    ;COORD. OPPERVLAK ~
+            Q204=+50   ;2E VEILIGHEIDSAFST. ~
+            Q370=+0.7  ;BAANOVERLAPPING ~
+            Q366=+1    ;INSTEKEN ~
+            Q385=+1100 ;AANZET NABEWERKEN ~
+            Q439=+0    ;REF. AANZET
+        7 L X+30 Y+50 R0 FMAX M8 M99
+        8 CYCL DEF 252 RONDE KAMER ~
+            Q215=+0    ;BEWERKINGSOMVANG ~
+            Q223=+30   ;CIRKELDIAMETER ~
+            Q368=+0.2  ;OVERMAAT ZIJKANT ~
+            Q207=+1100 ;AANZET FREZEN ~
+            Q351=+1    ;FREESWIJZE ~
+            Q201=-5    ;DIEPTE ~
+            Q202=+5    ;DIEPTEVERPLAATSING ~
+            Q369=+0.1  ;OVERMAAT DIEPTE ~
+            Q206=+1100 ;AANZET DIEPTEVERPL. ~
+            Q338=+5    ;VERPLAATSING NABEW. ~
+            Q200=+5    ;VEILIGHEIDSAFSTAND ~
+            Q203=+0    ;COORD. OPPERVLAK ~
+            Q204=+50   ;2E VEILIGHEIDSAFST. ~
+            Q370=+0.7  ;BAANOVERLAPPING ~
+            Q366=+1    ;INSTEKEN ~
+            Q385=+1100 ;AANZET NABEWERKEN ~
+            Q439=+0    ;REF. AANZET
+        9 L X+75 Y+60 R0 FMAX M99
+        10 CYCL DEF 253 SLEUFFREZEN ~
+            Q215=+0    ;BEWERKINGSOMVANG ~
+            Q218=+50   ;SLEUFLENGTE ~
+            Q219=+12   ;SLEUFBREEDTE ~
+            Q368=+0.2  ;OVERMAAT ZIJKANT ~
+            Q374=+20   ;ROTATIEPOSITIE ~
+            Q367=+0    ;SLEUF POSITIE ~
+            Q207=+1100 ;AANZET FREZEN ~
+            Q351=+1    ;FREESWIJZE ~
+            Q201=-5    ;DIEPTE ~
+            Q202=+5    ;DIEPTEVERPLAATSING ~
+            Q369=+0.1  ;OVERMAAT DIEPTE ~
+            Q206=+1100 ;AANZET DIEPTEVERPL. ~
+            Q338=+5    ;VERPLAATSING NABEW. ~
+            Q200=+5    ;VEILIGHEIDSAFSTAND ~
+            Q203=+0    ;COORD. OPPERVLAK ~
+            Q204=+50   ;2E VEILIGHEIDSAFST. ~
+            Q366=+2    ;INSTEKEN ~
+            Q385=+1100 ;AANZET NABEWERKEN ~
+            Q439=+0    ;REF. AANZET
+        11 L X+70 Y+22 R0 FMAX M99
+        12 L Z+100 R0 FMAX M9
+        13 L X+150 Y+150 R0 FMAX M30
+        14 END PGM 1214155 MM
+    """.trimIndent()
+
+    /**
+     * OEFENING 5: Tekening 1226642
+     * 22 Gaten boren en tappen:
+     * - Voorboren Ø6.8 (T229) met Cyclus 200 BOREN
+     * - Tappen M8 (T264) met Cyclus 206 SCHROEFDRAAD TAPPEN
+     * - Drie gatenpatronen via subprogramma's LBL 10, LBL 11, LBL 12
+     * - Incrementele verplaatsingen IX/IY en IPA met herhalingen CALL LBL REP.
+     */
+    val oefening5BorenTappen = """
+        0 BEGIN PGM 1226642 MM
+        1 BLK FORM 0.1 Z X+0 Y+0 Z-16
+        2 BLK FORM 0.2 X+100 Y+100 Z+0
+        3 * - VOORBOREN Ø6.8 (T229)
+        4 TOOL CALL 229 Z S6000
+        5 L Z+100 R0 FMAX M3 M8
+        6 CYCL DEF 200 BOREN ~
+            Q200=+5    ;VEILIGHEIDSAFSTAND ~
+            Q201=-17   ;DIEPTE ~
+            Q206=+840  ;AANZET DIEPTEVERPL. ~
+            Q202=+17   ;DIEPTEVERPLAATSING ~
+            Q210=+0    ;STILSTANDSTIJD BOVEN ~
+            Q203=+0    ;COORD. OPPERVLAK ~
+            Q204=+50   ;2E VEILIGHEIDSAFST. ~
+            Q211=+0    ;STILSTANDSTIJD ONDER ~
+            Q395=+0    ;REF. DIEPTE
+        7 CALL LBL 10
+        8 CALL LBL 11
+        9 CALL LBL 12
+        10 * - TAPPEN M8 (T264)
+        11 L Z+100 R0 FMAX M5 M9
+        12 L X+150 Y+150 R0 FMAX
+        13 TOOL CALL 264 Z S200
+        14 L Z+100 R0 FMAX M3 M8
+        15 CYCL DEF 206 SCHROEFDRAAD TAPPEN ~
+            Q200=+5    ;VEILIGHEIDSAFSTAND ~
+            Q201=-17   ;SCHROEFDRAADDIEPTE ~
+            Q206=+250  ;AANZET (200 x 1.25) ~
+            Q211=+0    ;STILSTANDSTIJD ONDER ~
+            Q203=+0    ;COORD. OPPERVLAK ~
+            Q204=+50   ;2E VEILIGHEIDSAFST.
+        16 CALL LBL 10
+        17 CALL LBL 11
+        18 CALL LBL 12
+        19 L Z+100 R0 FMAX M5 M9
+        20 L X+150 Y+150 R0 FMAX
+        21 M30
+        22 * - SUBPROGRAMMA'S
+        23 LBL 10
+        24 * - RIJ 1 (8 GATEN)
+        25 L X+30 Y+15 R0 FMAX
+        26 LBL 1
+        27 CYCL CALL
+        28 L IX+3.420 IY+9.397 FMAX
+        29 CALL LBL 1 REP 7
+        30 LBL 0
+        31 LBL 11
+        32 * - RIJ 2 (8 GATEN)
+        33 L X+11.206 Y+21.840 R0 FMAX
+        34 LBL 2
+        35 CYCL CALL
+        36 L IX+3.420 IY+9.397 FMAX
+        37 CALL LBL 2 REP 7
+        38 LBL 0
+        39 LBL 12
+        40 * - CIRKEL 6x60 R15
+        41 CC X+70 Y+30
+        42 LP PR+15 PA+30 R0 FMAX
+        43 LBL 3
+        44 CYCL CALL
+        45 LP IPA+60 FMAX
+        46 CALL LBL 3 REP 5
+        47 LBL 0
+        48 END PGM 1226642 MM
+    """.trimIndent()
+
+    /**
      * 1. CONTOURFREZEN_V4.H:
      * Omtrekfrezen (120x120) + complex eiland met CC/C, CR, RND en CHF 12 (meelopend frezen RL),
      * inclusief voorfrezen (DR+0.5), nafrezen (DR+0) en ontbramen (KANTENFREES6 met DL-1.5 DR-1.5).
@@ -524,6 +762,11 @@ object SamplePrograms {
     """.trimIndent()
 
     val all: List<Pair<String, String>> = listOf(
+        "OEFENING 1 (1226651 - Regelmatige vijfhoek CC/LP)" to oefening1Pentagon,
+        "OEFENING 2 (1206129 - Ruit eiland APPR/DEP LT RL)" to oefening2Ruit,
+        "OEFENING 3 (1214098 - Boogcontour CC & C DR+)" to oefening3Boog,
+        "OEFENING 4 (1214155 - Cycli 251, 252, 253 M99)" to oefening4Cycli,
+        "OEFENING 5 (1226642 - Boren & Tappen LBL/REP)" to oefening5BorenTappen,
         "CONTOURFREZEN_V4.H (Omtrek & Ontbramen)" to contourfrezenV4,
         "SL_CYCLI_EILANDEN.H (SL 14, 20, 22, 24 met Eilanden)" to slCycliEilanden,
         "STEEKCIRKEL_VLAKFREES.H (Vlakken 232 & Steekcirkel 220)" to steekcirkelVlakfrees,

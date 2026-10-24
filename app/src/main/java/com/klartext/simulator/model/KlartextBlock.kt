@@ -88,8 +88,8 @@ sealed class KlartextBlock {
     data class LinearPolar(
         override val lineNumber: Int,
         override val rawText: String,
-        val pr: Float,
-        val pa: Float,
+        val pr: Float? = null,
+        val pa: Float? = null,
         val z: Float? = null,
         val rawPR: String? = null,
         val rawPA: String? = null,
@@ -239,7 +239,8 @@ sealed class KlartextBlock {
         override val rawText: String,
         val labelNumber: Int,
         val labelName: String = labelNumber.toString(),
-        val repeatCount: Int = 1
+        val repeatCount: Int = 1,
+        val isRepeat: Boolean = false
     ) : KlartextBlock()
 
     data class CycleDef(
