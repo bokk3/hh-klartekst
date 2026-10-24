@@ -4,7 +4,7 @@ object SamplePrograms {
 
     /**
      * 1. CONTOURFREZEN_V4.H:
-     * Omtrekfrezen (120x120) + complex eiland met CC/C, CR, CT, RND en CHF 10,
+     * Omtrekfrezen (120x120) + complex eiland met CC/C, CR, RND en CHF 12 (meelopend frezen RL),
      * inclusief voorfrezen (DR+0.5), nafrezen (DR+0) en ontbramen (KANTENFREES6 met DL-1.5 DR-1.5).
      */
     val contourfrezenV4 = """
@@ -13,61 +13,64 @@ object SamplePrograms {
         2 BLK FORM 0.1 Z X+0 Y+0 Z-25
         3 BLK FORM 0.2 X+120 Y+120 Z+0
         4 ; ===================================================
-        5 ; GEREEDSCHAP 1: VOORFREZEN CONTOUR (OVERMAAT DR+0.5)
+        5 ; GEREEDSCHAP 1: VOORFREZEN EILAND (OVERMAAT DR+0.5)
         6 ; ===================================================
         7 TOOL CALL "FREES16" Z S3500 F1200 DR+0.5
         8 L Z+100 R0 FMAX
-        9 L X-20 Y-20 R0 FMAX
+        9 L X-20 Y+15 R0 FMAX
         10 L Z+2 R0 FMAX
         11 L Z-10 R0 F500 M3
-        12 APPR LCT X+15 Y+15 R10 RL F800
-        13 L X+105 Y+15
-        14 RND R12
-        15 L X+105 Y+65
-        16 CR X+75 Y+95 R+30 DR+
-        17 CT X+45 Y+105
-        18 CHF 10
-        19 L X+15 Y+105
-        20 L X+15 Y+15
-        21 DEP LCT X-20 Y-20 R10 F1000
-        22 L Z+50 R0 FMAX
-        23 ; ===================================================
-        24 ; GEREEDSCHAP 2: NAFREZEN CONTOUR OP MAAT (DR+0)
-        25 ; ===================================================
-        26 TOOL CALL "FREES16" Z S4200 F900 DR+0
-        27 L X-20 Y-20 R0 FMAX
-        28 L Z+2 R0 FMAX
-        29 L Z-10 R0 F400 M3
-        30 APPR LCT X+15 Y+15 R10 RL F900
-        31 L X+105 Y+15
-        32 RND R12
-        33 L X+105 Y+65
-        34 CR X+75 Y+95 R+30 DR+
-        35 CT X+45 Y+105
-        36 CHF 10
-        37 L X+15 Y+105
-        38 L X+15 Y+15
-        39 DEP LCT X-20 Y-20 R10 F1000
-        40 L Z+100 R0 FMAX
-        41 ; ===================================================
-        42 ; GEREEDSCHAP 3: ONTBRAMEN 0.3x45 MET KANTENFREES6
+        12 APPR LCT X+18 Y+35 R12 RL F800
+        13 L X+18 Y+102
+        14 CHF 12
+        15 L X+72 Y+102
+        16 CR X+102 Y+72 R+30 DR-
+        17 L X+102 Y+18
+        18 RND R12
+        19 L X+18 Y+18
+        20 RND R12
+        21 L X+18 Y+40
+        22 DEP LCT X-20 Y+40 R12 F1000
+        23 L Z+50 R0 FMAX
+        24 ; ===================================================
+        25 ; GEREEDSCHAP 2: NAFREZEN EILAND OP MAAT (DR+0)
+        26 ; ===================================================
+        27 TOOL CALL "FREES16" Z S4200 F900 DR+0
+        28 L X-20 Y+15 R0 FMAX
+        29 L Z+2 R0 FMAX
+        30 L Z-10 R0 F400 M3
+        31 APPR LCT X+18 Y+35 R12 RL F900
+        32 L X+18 Y+102
+        33 CHF 12
+        34 L X+72 Y+102
+        35 CR X+102 Y+72 R+30 DR-
+        36 L X+102 Y+18
+        37 RND R12
+        38 L X+18 Y+18
+        39 RND R12
+        40 L X+18 Y+40
+        41 DEP LCT X-20 Y+40 R12 F1000
+        42 L Z+100 R0 FMAX
         43 ; ===================================================
-        44 TOOL CALL "KANTENFREES6" Z S5000 F1500 DL-1.5 DR-1.5
-        45 L X-20 Y-20 R0 FMAX
-        46 L Z+2 R0 FMAX
-        47 L Z-0.3 R0 F600 M3
-        48 APPR LCT X+15 Y+15 R5 RL F1500
-        49 L X+105 Y+15
-        50 RND R12
-        51 L X+105 Y+65
-        52 CR X+75 Y+95 R+30 DR+
-        53 CT X+45 Y+105
-        54 CHF 10
-        55 L X+15 Y+105
-        56 L X+15 Y+15
-        57 DEP LCT X-20 Y-20 R5 F1500
-        58 L Z+100 R0 FMAX M30
-        59 END PGM CONTOURFREZEN_V4 MM
+        44 ; GEREEDSCHAP 3: ONTBRAMEN 0.3x45 MET KANTENFREES6
+        45 ; ===================================================
+        46 TOOL CALL "KANTENFREES6" Z S5000 F1500 DL-1.5 DR-1.5
+        47 L X-20 Y+15 R0 FMAX
+        48 L Z+2 R0 FMAX
+        49 L Z-0.3 R0 F600 M3
+        50 APPR LCT X+18 Y+35 R8 RL F1500
+        51 L X+18 Y+102
+        52 CHF 12
+        53 L X+72 Y+102
+        54 CR X+102 Y+72 R+30 DR-
+        55 L X+102 Y+18
+        56 RND R12
+        57 L X+18 Y+18
+        58 RND R12
+        59 L X+18 Y+40
+        60 DEP LCT X-20 Y+40 R8 F1500
+        61 L Z+100 R0 FMAX M30
+        62 END PGM CONTOURFREZEN_V4 MM
     """.trimIndent()
 
     /**

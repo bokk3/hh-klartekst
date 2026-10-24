@@ -1052,23 +1052,36 @@ private fun DrawScope.drawMaterialRemoval25D(
 
     for (row in 0 until grid.rows) {
         val yVal = grid.minY + row * ((grid.maxY - grid.minY) / grid.rows)
-        for (col in 0 until grid.cols) {
-            val xVal = grid.minX + col * ((grid.maxX - grid.minX) / grid.cols)
-            val z = grid.getZ(col, row)
-
-            val color = when {
-                z >= grid.maxZ - 0.05f -> Color(0xFF5A6B5C)       // Uncut raw stock
-                z >= -0.5f -> Color(0xFFD35400)                    // Faced surface (TNC Orange)
-                z >= -10.0f -> Color(0xFFF1C40F)                   // Pocket depth (Golden Yellow)
-                z >= -25.0f -> Color(0xFF27AE60)                   // Deep pocket / slot (Green)
+        var col = 0
+        while (col < grid.cols) {
+            val z0 = grid.getZ(col, row)
+            val color0 = when {
+                z0 >= grid.maxZ - 0.05f -> Color(0xFF5A6B5C)       // Uncut raw stock
+                z0 >= -0.5f -> Color(0xFFD35400)                    // Faced surface (TNC Orange)
+                z0 >= -10.0f -> Color(0xFFF1C40F)                   // Pocket depth (Golden Yellow)
+                z0 >= -25.0f -> Color(0xFF27AE60)                   // Deep pocket / slot (Green)
                 else -> Color(0xFF1F618D)                          // Deep hole / thread (Blue)
             }
-
-            val pt = projectPoint(Point3D(xVal, yVal, z), ViewMode.TOP_XY, center, scale)
+            val startCol = col
+            while (col < grid.cols) {
+                val zNext = grid.getZ(col, row)
+                val colorNext = when {
+                    zNext >= grid.maxZ - 0.05f -> Color(0xFF5A6B5C)
+                    zNext >= -0.5f -> Color(0xFFD35400)
+                    zNext >= -10.0f -> Color(0xFFF1C40F)
+                    zNext >= -25.0f -> Color(0xFF27AE60)
+                    else -> Color(0xFF1F618D)
+                }
+                if (colorNext != color0) break
+                col++
+            }
+            val spanCols = col - startCol
+            val xVal = grid.minX + startCol * ((grid.maxX - grid.minX) / grid.cols)
+            val pt = projectPoint(Point3D(xVal, yVal, z0), ViewMode.TOP_XY, center, scale)
             drawRect(
-                color = color,
+                color = color0,
                 topLeft = Offset(pt.x, pt.y - cellH),
-                size = Size(cellW + 0.5f, cellH + 0.5f)
+                size = Size(cellW * spanCols + 0.5f, cellH + 0.5f)
             )
         }
     }

@@ -75,7 +75,10 @@ class SimulatorViewModel : ViewModel() {
         updateHeightmap(stepIndex = 0)
     }
 
-    private fun updateHeightmap(stepIndex: Int) {
+    private fun updateHeightmap(stepIndex: Int, isPlayingNow: Boolean = false) {
+        if (isPlayingNow && stepIndex % 3 != 0 && stepIndex < _uiState.value.segments.size) {
+            return
+        }
         heightfieldJob?.cancel()
         heightfieldJob = viewModelScope.launch(Dispatchers.Default) {
             val stock = _uiState.value.stock
@@ -112,7 +115,7 @@ class SimulatorViewModel : ViewModel() {
                 val effectiveSpeed = (_uiState.value.playbackSpeed * (feedOv / 100f)).coerceAtLeast(0.05f)
                 val delayMs = (400L / effectiveSpeed).toLong().coerceIn(20L, 2500L)
                 delay(delayMs)
-                stepForward()
+                stepForward(isPlayingNow = true)
                 if (_uiState.value.isSingleBlockActive) {
                     pause()
                     break
@@ -128,6 +131,7 @@ class SimulatorViewModel : ViewModel() {
         playbackJob?.cancel()
         playbackJob = null
         _uiState.update { it.copy(isPlaying = false) }
+        updateHeightmap(_uiState.value.machineState.currentStepIndex, isPlayingNow = false)
     }
 
     fun reset() {
@@ -135,21 +139,21 @@ class SimulatorViewModel : ViewModel() {
         seekToStep(0)
     }
 
-    fun stepForward() {
+    fun stepForward(isPlayingNow: Boolean = false) {
         val next = _uiState.value.machineState.currentStepIndex + 1
         if (next <= _uiState.value.segments.size) {
-            seekToStep(next)
+            seekToStep(next, isPlayingNow = isPlayingNow)
         }
     }
 
     fun stepBackward() {
         val prev = _uiState.value.machineState.currentStepIndex - 1
         if (prev >= 0) {
-            seekToStep(prev)
+            seekToStep(prev, isPlayingNow = false)
         }
     }
 
-    fun seekToStep(step: Int) {
+    fun seekToStep(step: Int, isPlayingNow: Boolean = false) {
         val segments = _uiState.value.segments
         val clampedStep = step.coerceIn(0, segments.size)
 
@@ -189,7 +193,7 @@ class SimulatorViewModel : ViewModel() {
             it.copy(machineState = updatedMachineState)
         }
 
-        updateHeightmap(clampedStep)
+        updateHeightmap(clampedStep, isPlayingNow = isPlayingNow)
     }
 
     fun setFeedOverride(percent: Int) {

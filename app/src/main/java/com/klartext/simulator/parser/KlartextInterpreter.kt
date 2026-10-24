@@ -631,12 +631,44 @@ class KlartextInterpreter {
                     } else {
                         Point2D(targetX - currentX, targetY - currentY).normalized()
                     }
+
+                    if (block.apprType == ApprDepType.LCT && block.radius != null && block.radius > 0.5f) {
+                        val apprR = block.radius
+                        val normal = when (effectiveComp) {
+                            RadiusComp.RL -> contourDir.leftNormal()
+                            RadiusComp.RR -> contourDir.rightNormal()
+                            RadiusComp.R0 -> contourDir.leftNormal()
+                        }
+                        val center = targetPt + normal * apprR
+                        val dir = if (effectiveComp == RadiusComp.RR) Direction.CW else Direction.CCW
+                        val pH = center - contourDir * apprR
+
+                        // 1. Approach line to auxiliary point pH
+                        val startPt3D = Point3D(currentX, currentY, currentZ)
+                        val pH3D = Point3D(pH.x, pH.y, targetZ)
+                        addLinearSegment(block.lineNumber, startPt3D, pH3D, MoveType.FEED, currentFeed, effectiveComp)
+
+                        // 2. Tangential arc blending into the contour start point
+                        val target3D = Point3D(targetX, targetY, targetZ)
+                        addArcSegment(
+                            lineNum = block.lineNumber,
+                            progStart = pH3D,
+                            progEnd = target3D,
+                            center = center,
+                            progRadius = apprR,
+                            direction = dir,
+                            moveType = MoveType.FEED,
+                            feed = currentFeed,
+                            comp = effectiveComp
+                        )
+                    } else {
+                        lastTangent = contourDir
+                        val progStart = Point3D(currentX, currentY, currentZ)
+                        val progEnd = Point3D(targetX, targetY, targetZ)
+                        addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, effectiveComp)
+                    }
+
                     lastTangent = contourDir
-
-                    val progStart = Point3D(currentX, currentY, currentZ)
-                    val progEnd = Point3D(targetX, targetY, targetZ)
-                    addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, effectiveComp)
-
                     currentX = targetX
                     currentY = targetY
                     currentZ = targetZ
@@ -644,21 +676,51 @@ class KlartextInterpreter {
 
                 is KlartextBlock.Depart -> {
                     block.feedRate?.let { currentFeed = it }
-                    val len = block.len ?: block.radius ?: 10f
+                    val apprR = block.radius ?: 10f
                     val targetPt = if (block.x != null || block.y != null) {
                         resolveTargetXY(block.x, block.y, false, false, currentX, currentY)
                     } else {
-                        Point2D(currentX + lastTangent.x * len, currentY + lastTangent.y * len)
+                        Point2D(currentX + lastTangent.x * (block.len ?: 10f), currentY + lastTangent.y * (block.len ?: 10f))
                     }
                     val targetX = targetPt.x
                     val targetY = targetPt.y
                     val targetZ = block.z?.plus(datumZ) ?: currentZ
 
-                    val progStart = Point3D(currentX, currentY, currentZ)
-                    val progEnd = Point3D(targetX, targetY, targetZ)
-                    // Departure cancels radius compensation at the end of the depart move
-                    activeRadiusComp = RadiusComp.R0
-                    addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, RadiusComp.R0)
+                    if (block.depType == ApprDepType.LCT && apprR > 0.5f) {
+                        val normal = when (activeRadiusComp) {
+                            RadiusComp.RL -> lastTangent.leftNormal()
+                            RadiusComp.RR -> lastTangent.rightNormal()
+                            RadiusComp.R0 -> lastTangent.leftNormal()
+                        }
+                        val center = Point2D(currentX, currentY) + normal * apprR
+                        val dir = if (activeRadiusComp == RadiusComp.RR) Direction.CW else Direction.CCW
+                        val pH = center + lastTangent * apprR
+
+                        // 1. Tangential departure arc leaving the contour
+                        val startPt3D = Point3D(currentX, currentY, currentZ)
+                        val pH3D = Point3D(pH.x, pH.y, currentZ)
+                        addArcSegment(
+                            lineNum = block.lineNumber,
+                            progStart = startPt3D,
+                            progEnd = pH3D,
+                            center = center,
+                            progRadius = apprR,
+                            direction = dir,
+                            moveType = MoveType.FEED,
+                            feed = currentFeed,
+                            comp = activeRadiusComp
+                        )
+
+                        // 2. Straight departure line to target, canceling radius comp
+                        activeRadiusComp = RadiusComp.R0
+                        val target3D = Point3D(targetX, targetY, targetZ)
+                        addLinearSegment(block.lineNumber, pH3D, target3D, MoveType.FEED, currentFeed, RadiusComp.R0)
+                    } else {
+                        val progStart = Point3D(currentX, currentY, currentZ)
+                        val progEnd = Point3D(targetX, targetY, targetZ)
+                        activeRadiusComp = RadiusComp.R0
+                        addLinearSegment(block.lineNumber, progStart, progEnd, MoveType.FEED, currentFeed, RadiusComp.R0)
+                    }
 
                     currentX = targetX
                     currentY = targetY
