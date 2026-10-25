@@ -79,6 +79,10 @@ fun MobileSimulationWorkspace(
                     onOpenDiagnostics = onOpenDiagnostics
                 )
 
+                if (uiState.collisionAlertMessage != null) {
+                    CollisionAlertBanner(message = uiState.collisionAlertMessage)
+                }
+
                 SimulationCanvas(
                     state = uiState,
                     currentStepIndex = uiState.machineState.currentStepIndex,
@@ -273,6 +277,10 @@ fun MobileSimulationWorkspace(
                 spindleOverride = uiState.spindleOverride,
                 onOpenDiagnostics = onOpenDiagnostics
             )
+
+            if (uiState.collisionAlertMessage != null) {
+                CollisionAlertBanner(message = uiState.collisionAlertMessage)
+            }
 
             // 2. Adaptive View Mode Strip (never clipped!)
             ViewModeChipStrip(

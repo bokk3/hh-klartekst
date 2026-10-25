@@ -93,6 +93,8 @@ data class SimulationUiState(
     val stock: StockBox = StockBox(),
     val machineState: MachineState = MachineState(),
     val heightfield: ZMapHeightfield? = null,
+    val voxelMesh: com.klartext.simulator.engine.VoxelMesh3D? = null,
+    val collisionAlertMessage: String? = null,
     val isPlaying: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val viewMode: ViewMode = ViewMode.TOP_XY,

@@ -80,6 +80,10 @@ fun TwinScreenConsoleView(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            if (uiState.collisionAlertMessage != null) {
+                com.klartext.simulator.ui.designsystem.CollisionAlertBanner(message = uiState.collisionAlertMessage)
+            }
+
             // 2. Simulation Canvas & Code Viewer Side-by-side
             Row(
                 modifier = Modifier

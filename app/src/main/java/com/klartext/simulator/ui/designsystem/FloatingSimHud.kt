@@ -27,6 +27,43 @@ import com.klartext.simulator.ui.theme.*
 import java.util.Locale
 
 /**
+ * Persistent high-visibility collision alert banner.
+ * Displayed when tool shank or rapid move collides with workpiece material.
+ */
+@Composable
+fun CollisionAlertBanner(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFB71C1C))
+            .border(1.dp, Color(0xFFFF5252), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            Icons.Default.Warning,
+            contentDescription = "Collision Warning",
+            tint = Color.White,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = message,
+            color = Color.White,
+            fontSize = 9.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
  * Compact, high-contrast Digital Readout (DRO) bar designed for mobile workspaces
  * to maximize 3D/2D canvas area while keeping X, Y, Z, F, S, Tool, and Comp legible.
  */

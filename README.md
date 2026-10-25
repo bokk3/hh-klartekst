@@ -41,14 +41,24 @@ Om ongewenst zwabberen over meerdere assen tijdens veegbewegingen op touchscreen
   - **Twee vingers slepen**: Pan-verschuiving in $X$ en $Y$.
   - **Twee vingers draaien**: Vrije rotatie om de schermas.
 
-### 3. 2.5D Volumetrische Verspaningssimulatie
-- **Realtime Materiaalafname**: Hoogtemap-raster van $\approx 100 \times 100$ cellen over het ruwdeelblok.
-- **Ondersteuning voor Diverse Freesprofielen**:
-  - Vlakke vingerfrezen en vlakfrezen (cilindrisch).
-  - $45^\circ$ vellingfrezen en $90^\circ$ centerboren (conisch profiel: $Z(r) = Z_{tip} + r$).
-  - Bolfrezen (sferisch profiel: $Z(r) = Z_{tip} + R - \sqrt{R^2 - r^2}$).
-  - Torusfrezen / Bull-nose met hoekstraal $R_c$.
-- **Stapsgewijze Visualisatie**: Materiaalafname volgt synchroon de geselecteerde programmastap of de automatische afspeelcyclus.
+### 3. Native 3D Voxel Verspanings- & Mesh-Engine (Geïnspireerd op Slavomrkva's tnc-sim)
+- **Isotropisch 3D Voxel Grid**: Automatische planning (`VoxelGridPlan`) met binaire zoekmethode voor een perfect isotrope celgrootte binnen het geheugenbudget voor soepele 60fps prestaties op Android.
+- **Marching Cubes Solide Oppervlaktereconstructie**:
+  - Volledige implementatie van de 256-edge en 4096-driehoek Marching Cubes opzoektabellen (`MarchingCubesTables`).
+  - Realtime reconstructie van het uitgefreesde solide 3D werkstuk (`VoxelMesh3D`) inclusief cilindrische ruwdeelmaskering (`blkCyl`).
+  - Authentieke per-gereedschap vertexinkleuring (`TOOL_CUT_COLORS`: Oranje, Groen, Blauw, Rood, Paars, Cyaan, Geel, Roze) en ruwdeelstaalkleur (`#9A9DA6`).
+- **Natuurgetrouwe Fysische Gereedschapsprofielen (`vxToolRadiusAtHeight`)**:
+  - **Vlakke vingerfrees**: Constante cilindrische snijkant $effR = R$.
+  - **Bolfrees (Ball nose)**: Sferische geometrie $effR = r_2 \cdot \sqrt{\max(0, 1 - (1 - dz/r_2)^2)}$.
+  - **Torusfrees / Bull-nose**: Hoekstraalovergang $effR = (R - R_2) + \sqrt{\max(0, R_2^2 - (R_2 - dz)^2)}$.
+  - **Spiraal- & Centerboren**: Conische punt die verbreedt volgens $effR = \min(R, dz \cdot \tan(\alpha/2))$.
+  - **Kantenfrezen & Verzinkers**: Afschuinhoek met begrensde effectieve snijdiameter $\min(coneCap, R + dz \cdot \tan(\alpha/2))$.
+- **Fysische Botsings- & Schachtdetectie**:
+  - **Schachtbotsing (LCUTS)**: Wanneer de snedediepte de effectieve spaangroeflengte ($dz > LCUTS$) overschrijdt, kleurt de botsingszone alarmrood (ID 255) en verschijnt een hardnekkige rode waarschuwingsbanner in de DRO.
+  - **Rapid- in materiaalbotsing**: Automatische detectie bij ijlgang (`FMAX`) of beweging met stilstaande spil door onverspaand materiaal.
+- **Directionele Lambertian Shading & Tweekleurig Gereedschap**:
+  - Key directional light vector $\vec{L} = (1.2, -0.8, 2.0)$ met zachte diffuse beschaduwing.
+  - Tweekleurig 3D gereedschapsmodel: metalen schacht (`#CFD3DA`), gekleurde snijfluiten en HSK/BT40 spantanghouder.
 
 ### 4. TNC 640 Bedieningspaneel & Twee Visuele Thema's
 - **Thema 1: CLASSIC_TNC640 (Industrieel HEIDENHAIN TE 640)**:

@@ -202,7 +202,17 @@ fun SimulationCanvas(
                         val activeYaw = if (state.viewMode == ViewMode.ISOMETRIC && orbitYaw == 0f) 45f else orbitYaw
                         val activePitch = if (state.viewMode == ViewMode.ISOMETRIC && orbitPitch == 0f) 35f else orbitPitch
                         val activeRoll = if (state.viewMode == ViewMode.ISOMETRIC) 0f else orbitRoll
-                        if (state.heightfield != null) {
+                        if (state.voxelMesh != null && state.voxelMesh.triangles.isNotEmpty()) {
+                            drawOrbit3DVoxelMesh(
+                                mesh = state.voxelMesh,
+                                stock = state.stock,
+                                center = center,
+                                scale = scale,
+                                yaw = activeYaw,
+                                pitch = activePitch,
+                                roll = activeRoll
+                            )
+                        } else if (state.heightfield != null) {
                             drawOrbit3DMaterialRemoval(
                                 grid = state.heightfield,
                                 stock = state.stock,
@@ -678,6 +688,82 @@ private fun DrawScope.drawStock3D(
     for ((i, j) in topEdges) {
         drawLine(Color(0xFF8B9E8D), corners[i], corners[j], strokeWidth = 1.5f)
     }
+}
+
+/**
+ * Renders the true 3D solid milled workpiece with Marching Cubes triangles,
+ * authentic per-tool cut colors, Slavomrkva key directional lighting, and Painter's algorithm.
+ */
+private fun DrawScope.drawOrbit3DVoxelMesh(
+    mesh: com.klartext.simulator.engine.VoxelMesh3D,
+    stock: StockBox,
+    center: Offset,
+    scale: Float,
+    yaw: Float,
+    pitch: Float,
+    roll: Float = 0f
+) {
+    // 1. Draw 5-Axis Machine Vise Clamping Base under stock
+    drawMachineVise3D(stock, center, scale, yaw, pitch, roll)
+
+    val yawRad = Math.toRadians(yaw.toDouble())
+    val pitchRad = Math.toRadians(pitch.toDouble())
+    val rollRad = Math.toRadians(roll.toDouble())
+
+    val cosY = cos(yawRad).toFloat()
+    val sinY = sin(yawRad).toFloat()
+    val cosP = cos(pitchRad).toFloat()
+    val sinP = sin(pitchRad).toFloat()
+    val cosR = cos(rollRad).toFloat()
+    val sinR = sin(rollRad).toFloat()
+
+    fun depthOf(p: Point3D): Float {
+        val x1 = p.x * cosY - p.y * sinY
+        val y1 = p.x * sinY + p.y * cosY
+        val z1 = p.z
+        val x2 = x1 * cosR + z1 * sinR
+        val y2 = y1
+        val z2 = -x1 * sinR + z1 * cosR
+        return y2 * cosP - z2 * sinP
+    }
+
+    class ProjectedTri(
+        val s0: Offset,
+        val s1: Offset,
+        val s2: Offset,
+        val depth: Float,
+        val color: Color
+    )
+
+    val projectedList = ArrayList<ProjectedTri>(mesh.triangles.size)
+
+    for (tri in mesh.triangles) {
+        val s0 = projectPoint(tri.p1, ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+        val s1 = projectPoint(tri.p2, ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+        val s2 = projectPoint(tri.p3, ViewMode.ORBIT_3D, center, scale, yaw, pitch, roll)
+
+        // Screen-space 2D cross product for instant backface culling
+        val cross = (s1.x - s0.x) * (s2.y - s0.y) - (s1.y - s0.y) * (s2.x - s0.x)
+        if (cross <= 0f) continue
+
+        val avgDepth = (depthOf(tri.p1) + depthOf(tri.p2) + depthOf(tri.p3)) * 0.3333f
+        projectedList.add(ProjectedTri(s0, s1, s2, avgDepth, tri.color))
+    }
+
+    projectedList.sortBy { it.depth }
+
+    val triPath = Path()
+    for (pt in projectedList) {
+        triPath.reset()
+        triPath.moveTo(pt.s0.x, pt.s0.y)
+        triPath.lineTo(pt.s1.x, pt.s1.y)
+        triPath.lineTo(pt.s2.x, pt.s2.y)
+        triPath.close()
+        drawPath(triPath, color = pt.color)
+    }
+
+    // Outer wireframe accent for crisp technical look
+    drawStockEdges3D(stock, center, scale, yaw, pitch, roll)
 }
 
 /**
@@ -1235,24 +1321,33 @@ private fun DrawScope.drawToolAssembly(
             )
         }
     } else {
-        // Vertical assembly: Cutter flute + HSK/BT40/SK40 Holder
+        // Vertical assembly: Two-tone Cutter (Flutes + Shank) + HSK/BT40/SK40 Holder
         val stickOut = tool.stickOut
-        val fluteEnd = Point3D(pos.x, pos.y, pos.z + stickOut)
+        val lcuts = (effectiveRadius * 3.5f).coerceIn(10f, stickOut * 0.6f)
+        val fluteEnd = Point3D(pos.x, pos.y, pos.z + lcuts)
         val fluteTopScreen = projectPoint(fluteEnd, viewMode, center, scale, yaw, pitch, roll)
 
-        // Cutter flute cylinder
-        val fluteColor = when (tool.geometryType) {
-            ToolGeometryType.BALL_NOSE, ToolGeometryType.TORUS_MILL -> Color(0xFF81C784)
-            ToolGeometryType.SPOT_DRILL_90, ToolGeometryType.TWIST_DRILL -> Color(0xFF64B5F6)
-            ToolGeometryType.TAP, ToolGeometryType.THREAD_MILL -> Color(0xFFBA68C8)
-            else -> Color(0xFFFFD54F)
-        }
+        val shankEnd = Point3D(pos.x, pos.y, pos.z + stickOut)
+        val shankTopScreen = projectPoint(shankEnd, viewMode, center, scale, yaw, pitch, roll)
+
+        // 1. Cutting flute area (colored with authentic tool cut color)
+        val toolCutColors = com.klartext.simulator.engine.MarchingCubesTables.TOOL_CUT_COLORS
+        val tc = toolCutColors[(tool.number - 1).coerceAtLeast(0) % toolCutColors.size]
+        val fluteColor = Color(tc[0], tc[1], tc[2])
 
         drawLine(
             color = fluteColor,
             start = tipScreen,
             end = fluteTopScreen,
-            strokeWidth = (effectiveRadius * 2f * scale).coerceAtLeast(3f)
+            strokeWidth = (effectiveRadius * 2f * scale).coerceAtLeast(3.5f)
+        )
+
+        // 2. Shank body (realistic metallic grey #cfd3da)
+        drawLine(
+            color = Color(0xFFCFD3DA),
+            start = fluteTopScreen,
+            end = shankTopScreen,
+            strokeWidth = (effectiveRadius * 2f * 0.9f * scale).coerceAtLeast(3f)
         )
 
         if (showHolder) {
@@ -1261,7 +1356,7 @@ private fun DrawScope.drawToolAssembly(
             val nutTopScreen = projectPoint(nutTop, viewMode, center, scale, yaw, pitch, roll)
             drawLine(
                 color = Color(0xFF37474F),
-                start = fluteTopScreen,
+                start = shankTopScreen,
                 end = nutTopScreen,
                 strokeWidth = (tool.holder.colletDiameter * scale).coerceAtLeast(6f)
             )

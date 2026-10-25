@@ -2,6 +2,7 @@ package com.klartext.simulator.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.klartext.simulator.engine.VoxelGrid3D
 import com.klartext.simulator.model.*
 import com.klartext.simulator.parser.KlartextInterpreter
 import com.klartext.simulator.parser.KlartextParser
@@ -87,9 +88,24 @@ class SimulatorViewModel : ViewModel() {
                 stock = stock,
                 segments = segments,
                 maxStepIndex = stepIndex,
-                gridResolution = 90
+                gridResolution = 85
             )
-            _uiState.update { it.copy(heightfield = hf) }
+
+            // True 3D Voxel Engine with physical tool profiles & Marching Cubes meshing
+            val voxelSim = VoxelGrid3D.buildFromStock(stock)
+            val count = stepIndex.coerceIn(0, segments.size)
+            for (i in 0 until count) {
+                voxelSim.carveSegment(segments[i])
+            }
+            val mesh = voxelSim.generateMesh()
+
+            _uiState.update {
+                it.copy(
+                    heightfield = hf,
+                    voxelMesh = mesh,
+                    collisionAlertMessage = if (voxelSim.collisionDetected) voxelSim.collisionMessage else null
+                )
+            }
         }
     }
 
