@@ -2,7 +2,6 @@ package com.klartext.simulator.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -10,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,18 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.klartext.simulator.model.ActiveDialogSession
 import com.klartext.simulator.model.ConsoleTheme
+import com.klartext.simulator.ui.designsystem.CncKeyCap
 import com.klartext.simulator.ui.theme.*
 
 /**
- * Authentic HEIDENHAIN TE 640 Operating Panel & Console
- * Features:
- * - 2 Themes: CLASSIC_TNC640 (Authentic industrial hardware) & HYPERMODERN (Cyber CNC)
- * - Dual Rotary Potentiometers: Feed Rate & Spindle Speed (0% - 150%)
- * - NC START (Green), NC STOP (Red), SINGLE BLOCK mode
- * - Axis keys (X, Y, Z, IV)
- * - Klartekst Dialogue keys (L, C, CR, CT, CC, RND, CHF, APPR, DEP, CYCL DEF, TOOL CALL, LBL, Q)
- * - Numeric Keypad with authentic keycap colors (Ivory in Classic) & CE/DEL
- * - Dialog ENT, NO ENT, END, cursor navigation
+ * Authentic HEIDENHAIN TE 640 Operating Panel & Console.
+ * Uses CncKeyCap to ensure pixel-accurate industrial keycaps with zero Material 3
+ * minimum touch-target border overflow.
  */
 @Composable
 fun HeidenhainTe640Console(
@@ -67,7 +61,7 @@ fun HeidenhainTe640Console(
             .border(1.5.dp, colors.casingBorder, RoundedCornerShape(8.dp))
             .padding(6.dp)
             .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         // --- CONSOLE HEADER ---
         Row(
@@ -94,25 +88,17 @@ fun HeidenhainTe640Console(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // One-click Theme Toggle Badge
-                Button(
-                    onClick = onToggleConsoleTheme,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.headerBadgeBackground,
-                        contentColor = colors.headerBadgeTextColor
-                    ),
-                    contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
-                    shape = RoundedCornerShape(3.dp),
-                    modifier = Modifier.height(20.dp)
-                ) {
-                    Text(
-                        text = if (colors.isClassic) "TNC 640 KLASSIEK" else "HYPERMODERN",
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
+                CncKeyCap(
+                    label = if (colors.isClassic) "TNC 640 KLASSIEK" else "HYPERMODERN",
+                    containerColor = colors.headerBadgeBackground,
+                    textColor = colors.headerBadgeTextColor,
+                    height = 20.dp,
+                    fontSize = 8.5.sp,
+                    cornerRadius = 3.dp,
+                    modifier = Modifier.width(102.dp),
+                    onClick = onToggleConsoleTheme
+                )
 
-                // Single / Continuous Mode Indicator
                 Text(
                     text = if (isSingleBlockActive) "[ENKELE REGEL]" else "[CONTINU]",
                     fontSize = 9.sp,
@@ -151,81 +137,49 @@ fun HeidenhainTe640Console(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // NC START (Authentic Green Button)
-            Button(
-                onClick = onNcStart,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.ncStartBackground,
-                    contentColor = colors.ncStartText
-                ),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier
-                    .weight(1.3f)
-                    .height(38.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "NC START", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("NC START", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // NC STOP (Authentic Red Button)
-            Button(
-                onClick = onNcStop,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.ncStopBackground,
-                    contentColor = colors.ncStopText
-                ),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier
-                    .weight(1.3f)
-                    .height(38.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Pause, contentDescription = "NC STOP", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("NC STOP", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // SINGLE BLOCK TOGGLE
-            Button(
-                onClick = onToggleSingleBlock,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSingleBlockActive) colors.singleBlockActive else colors.singleBlockInactive,
-                    contentColor = if (isSingleBlockActive) colors.singleBlockActiveText else colors.singleBlockInactiveText
-                ),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(6.dp),
-                modifier = Modifier
-                    .weight(1.1f)
-                    .height(38.dp)
-            ) {
-                Text(
-                    text = "SINGLE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // RESET
-            IconButton(
-                onClick = onReset,
-                modifier = Modifier
-                    .size(38.dp)
-                    .background(colors.sectionBackground, RoundedCornerShape(6.dp))
-                    .border(1.dp, colors.sectionBorder, RoundedCornerShape(6.dp))
-            ) {
-                Icon(
-                    Icons.Default.Replay,
-                    contentDescription = "Reset",
-                    tint = colors.contourKeyText,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            CncKeyCap(
+                label = "NC START",
+                icon = Icons.Default.PlayArrow,
+                containerColor = colors.ncStartBackground,
+                textColor = colors.ncStartText,
+                height = 36.dp,
+                fontSize = 11.sp,
+                cornerRadius = 5.dp,
+                modifier = Modifier.weight(1.3f),
+                onClick = onNcStart
+            )
+            CncKeyCap(
+                label = "NC STOP",
+                icon = Icons.Default.Pause,
+                containerColor = colors.ncStopBackground,
+                textColor = colors.ncStopText,
+                height = 36.dp,
+                fontSize = 11.sp,
+                cornerRadius = 5.dp,
+                modifier = Modifier.weight(1.3f),
+                onClick = onNcStop
+            )
+            CncKeyCap(
+                label = "SINGLE",
+                containerColor = if (isSingleBlockActive) colors.singleBlockActive else colors.singleBlockInactive,
+                textColor = if (isSingleBlockActive) colors.singleBlockActiveText else colors.singleBlockInactiveText,
+                height = 36.dp,
+                fontSize = 10.sp,
+                cornerRadius = 5.dp,
+                modifier = Modifier.weight(1.0f),
+                onClick = onToggleSingleBlock
+            )
+            CncKeyCap(
+                label = "",
+                icon = Icons.Default.Replay,
+                containerColor = colors.sectionBackground,
+                textColor = colors.contourKeyText,
+                borderColor = colors.sectionBorder,
+                height = 36.dp,
+                cornerRadius = 5.dp,
+                modifier = Modifier.width(38.dp),
+                onClick = onReset
+            )
         }
 
         // --- 3. ACTIVE DIALOG STRIP (IF DIALOG RUNNING) ---
@@ -256,7 +210,7 @@ fun HeidenhainTe640Console(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${step?.promptLabel ?: ""} ${activeDialog.currentInput}",
+                    text = "${step?.promptLabel ?: ""} ${activeDialog.currentInput}▌",
                     color = CncDroGreen,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
@@ -281,27 +235,35 @@ fun HeidenhainTe640Console(
                 color = colors.sectionTitleColor
             )
 
-            // Linear & Arcs Row (L, C, CR, CT, CC, RND, CHF) - Iconic Orange Contour keys
+            // Linear & Arcs Row (L, C, CR, CT, CC, RND, CHF)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 listOf("L", "C", "CR", "CT", "CC", "RND", "CHF").forEach { cmd ->
-                    ConsoleCmdKey(
-                        text = cmd,
+                    CncKeyCap(
+                        label = cmd,
                         containerColor = colors.contourKeyBackground,
                         textColor = colors.contourKeyText,
-                        modifier = Modifier.weight(1f)
-                    ) { onStartCommand(cmd) }
+                        height = 27.dp,
+                        fontSize = 9.5.sp,
+                        cornerRadius = 3.dp,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onStartCommand(cmd) }
+                    )
                 }
             }
 
             // Cycles, Tool, Labels Row
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 listOf("APPR", "DEP", "CYCL DEF", "CYCL CALL", "TOOL CALL", "LBL SET", "CALL LBL").forEach { cmd ->
-                    ConsoleCmdKey(
-                        text = cmd,
+                    CncKeyCap(
+                        label = cmd,
                         containerColor = colors.cycleKeyBackground,
                         textColor = colors.cycleKeyText,
-                        modifier = Modifier.weight(1f)
-                    ) { onStartCommand(cmd) }
+                        height = 27.dp,
+                        fontSize = 8.5.sp,
+                        cornerRadius = 3.dp,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onStartCommand(cmd) }
+                    )
                 }
             }
         }
@@ -324,27 +286,21 @@ fun HeidenhainTe640Console(
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 listOf("X+", "X-", "Y+", "Y-", "Z+", "Z-", "IV+", "IV-").forEach { axis ->
-                    Button(
+                    CncKeyCap(
+                        label = axis,
+                        containerColor = colors.axisKeyBackground,
+                        textColor = if (axis.startsWith("Z")) colors.axisKeyTextZ else colors.axisKeyTextXy,
+                        borderColor = colors.axisKeyBorder,
+                        height = 25.dp,
+                        fontSize = 9.sp,
+                        cornerRadius = 3.dp,
+                        modifier = Modifier.weight(1f),
                         onClick = {
                             if (activeDialog != null) {
                                 onDialogChar(axis.take(1))
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.axisKeyBackground),
-                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(3.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(26.dp)
-                            .border(0.8.dp, colors.axisKeyBorder, RoundedCornerShape(3.dp))
-                    ) {
-                        Text(
-                            text = axis,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (axis.startsWith("Z")) colors.axisKeyTextZ else colors.axisKeyTextXy
-                        )
-                    }
+                        }
+                    )
                 }
             }
         }
@@ -357,95 +313,132 @@ fun HeidenhainTe640Console(
             // Numeric Block (Left)
             Column(
                 modifier = Modifier
-                    .weight(1.3f)
+                    .weight(1.35f)
                     .background(colors.sectionBackground, RoundedCornerShape(6.dp))
                     .border(1.dp, colors.sectionBorder, RoundedCornerShape(6.dp))
                     .padding(4.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf("7", "8", "9").forEach { k ->
-                        NumpadKey(
+                        CncKeyCap(
                             label = k,
                             containerColor = colors.numpadKeyBackground,
                             textColor = colors.numpadKeyText,
                             borderColor = colors.numpadKeyBorder,
-                            modifier = Modifier.weight(1f)
-                        ) { onDialogChar(k) }
+                            height = 27.dp,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onDialogChar(k) }
+                        )
                     }
-                    NumpadKey(
+                    CncKeyCap(
                         label = "CE",
                         containerColor = colors.deleteKeyBackground,
                         textColor = colors.deleteKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogDel() }
+                        height = 27.dp,
+                        fontSize = 10.sp,
+                        modifier = Modifier.weight(1f),
+                        onClick = onDialogDel
+                    )
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf("4", "5", "6").forEach { k ->
-                        NumpadKey(
+                        CncKeyCap(
                             label = k,
                             containerColor = colors.numpadKeyBackground,
                             textColor = colors.numpadKeyText,
                             borderColor = colors.numpadKeyBorder,
-                            modifier = Modifier.weight(1f)
-                        ) { onDialogChar(k) }
+                            height = 27.dp,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onDialogChar(k) }
+                        )
                     }
-                    NumpadKey(
+                    CncKeyCap(
                         label = "DEL",
                         containerColor = colors.deleteKeyBackground,
                         textColor = colors.deleteKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogDel() }
+                        height = 27.dp,
+                        fontSize = 10.sp,
+                        modifier = Modifier.weight(1f),
+                        onClick = onDialogDel
+                    )
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf("1", "2", "3").forEach { k ->
-                        NumpadKey(
+                        CncKeyCap(
                             label = k,
                             containerColor = colors.numpadKeyBackground,
                             textColor = colors.numpadKeyText,
                             borderColor = colors.numpadKeyBorder,
-                            modifier = Modifier.weight(1f)
-                        ) { onDialogChar(k) }
+                            height = 27.dp,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onDialogChar(k) }
+                        )
                     }
-                    NumpadKey(
+                    CncKeyCap(
                         label = "+/-",
                         containerColor = colors.numpadKeyBackground,
                         textColor = colors.numpadKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogChar("-") }
+                        height = 27.dp,
+                        fontSize = 10.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onDialogChar("-") }
+                    )
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    NumpadKey(
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    CncKeyCap(
                         label = "0",
                         containerColor = colors.numpadKeyBackground,
                         textColor = colors.numpadKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogChar("0") }
-                    NumpadKey(
+                        height = 27.dp,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onDialogChar("0") }
+                    )
+                    CncKeyCap(
                         label = ".",
                         containerColor = colors.numpadKeyBackground,
                         textColor = colors.numpadKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogChar(".") }
-                    NumpadKey(
+                        height = 27.dp,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onDialogChar(".") }
+                    )
+                    CncKeyCap(
                         label = "Q",
                         containerColor = colors.numpadKeyBackground,
                         textColor = colors.contourKeyText,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogChar("Q") }
-                    NumpadKey(
+                        height = 27.dp,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onDialogChar("Q") }
+                    )
+                    CncKeyCap(
                         label = "END",
                         containerColor = colors.cycleKeyBackground,
                         textColor = Color.White,
                         borderColor = colors.numpadKeyBorder,
-                        modifier = Modifier.weight(1f)
-                    ) { onDialogEnd() }
+                        height = 27.dp,
+                        fontSize = 10.sp,
+                        modifier = Modifier.weight(1f),
+                        onClick = onDialogEnd
+                    )
                 }
             }
 
@@ -459,122 +452,54 @@ fun HeidenhainTe640Console(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Line Navigation (Up / Down)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    IconButton(
-                        onClick = { onNavigateLine(-1) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(28.dp)
-                            .background(colors.axisKeyBackground, RoundedCornerShape(3.dp))
-                            .border(0.8.dp, colors.axisKeyBorder, RoundedCornerShape(3.dp))
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Regel Omhoog", tint = colors.numpadKeyText)
-                    }
-                    IconButton(
-                        onClick = { onNavigateLine(1) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(28.dp)
-                            .background(colors.axisKeyBackground, RoundedCornerShape(3.dp))
-                            .border(0.8.dp, colors.axisKeyBorder, RoundedCornerShape(3.dp))
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Regel Omlaag", tint = colors.numpadKeyText)
-                    }
-                }
-
-                // Authentic Warning Red NO ENT Key (Preserves modal RL/RR!)
-                Button(
-                    onClick = onDialogNoEnt,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.noEntKeyBackground),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp)
-                ) {
-                    Text(
-                        text = "NO ENT",
+                    CncKeyCap(
+                        label = "▲",
+                        containerColor = colors.axisKeyBackground,
+                        textColor = colors.numpadKeyText,
+                        borderColor = colors.axisKeyBorder,
+                        height = 27.dp,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.noEntKeyText
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateLine(-1) }
+                    )
+                    CncKeyCap(
+                        label = "▼",
+                        containerColor = colors.axisKeyBackground,
+                        textColor = colors.numpadKeyText,
+                        borderColor = colors.axisKeyBorder,
+                        height = 27.dp,
+                        fontSize = 11.sp,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateLine(1) }
                     )
                 }
 
-                // Authentic Machine Green ENT Key
-                Button(
-                    onClick = onDialogEnt,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.entKeyBackground),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                ) {
-                    Text(
-                        text = "ENT",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = colors.entKeyText
-                    )
-                }
+                CncKeyCap(
+                    label = "NO ENT",
+                    containerColor = colors.noEntKeyBackground,
+                    textColor = colors.noEntKeyText,
+                    height = 36.dp,
+                    fontSize = 11.sp,
+                    cornerRadius = 4.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onDialogNoEnt
+                )
+
+                CncKeyCap(
+                    label = "ENT",
+                    containerColor = colors.entKeyBackground,
+                    textColor = colors.entKeyText,
+                    height = 44.dp,
+                    fontSize = 13.sp,
+                    cornerRadius = 4.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onDialogEnt
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun ConsoleCmdKey(
-    text: String,
-    containerColor: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
-        contentPadding = PaddingValues(horizontal = 1.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(3.dp),
-        modifier = modifier.height(28.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun NumpadKey(
-    label: String,
-    containerColor: Color,
-    textColor: Color,
-    borderColor: Color? = null,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(3.dp),
-        modifier = modifier
-            .height(28.dp)
-            .then(if (borderColor != null) Modifier.border(0.8.dp, borderColor, RoundedCornerShape(3.dp)) else Modifier)
-    ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            color = textColor,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
     }
 }

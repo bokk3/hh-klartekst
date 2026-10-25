@@ -4,22 +4,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.klartext.simulator.model.SimulationUiState
 import com.klartext.simulator.model.ViewMode
+import com.klartext.simulator.ui.designsystem.CncKeyCap
+import com.klartext.simulator.ui.designsystem.CncSoftkey
+import com.klartext.simulator.ui.designsystem.CncTimelineScrubber
 import com.klartext.simulator.ui.theme.*
 
 /**
- * Tablet & Landscape Twin-Screen Layout for HEIDENHAIN TNC 640 Simulator
- * Left: Display Unit (DRO, 3D Orbit / 2.5D Canvas, Klartekst Code Viewer, Softkeys)
+ * Tablet & Large-Screen Twin-Screen Layout for HEIDENHAIN TNC 640 Simulator
+ * Left: Display Unit (DRO, 3D Orbit / 2.5D Canvas, Klartekst Code Viewer, Scrubber, Softkeys)
  * Right: Full HEIDENHAIN TE 640 Operating Panel with Dual Rotary Override Dials
  */
 @Composable
@@ -37,6 +37,7 @@ fun TwinScreenConsoleView(
     onNcStop: () -> Unit,
     onToggleSingleBlock: () -> Unit,
     onReset: () -> Unit,
+    onSeek: (Int) -> Unit = {},
     onStartCommand: (String) -> Unit,
     onDialogChar: (String) -> Unit,
     onDialogEnt: () -> Unit,
@@ -74,17 +75,18 @@ fun TwinScreenConsoleView(
                 state = uiState.machineState,
                 diagnostics = uiState.diagnostics,
                 onOpenDiagnostics = onOpenDiagnostics,
+                feedOverride = uiState.feedOverride,
+                spindleOverride = uiState.spindleOverride,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // 2. Simulation Canvas & Code Viewer Side-by-side or stacked
+            // 2. Simulation Canvas & Code Viewer Side-by-side
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Simulation Graphics Canvas
                 SimulationCanvas(
                     state = uiState,
                     currentStepIndex = uiState.machineState.currentStepIndex,
@@ -96,7 +98,6 @@ fun TwinScreenConsoleView(
                         .clipToBounds()
                 )
 
-                // Klartekst Code Viewer
                 CodeViewer(
                     blocks = uiState.blocks,
                     activeLineNumber = uiState.machineState.activeLineNumber,
@@ -108,18 +109,17 @@ fun TwinScreenConsoleView(
                 )
             }
 
-            // 3. View Mode Toolbar & Scrub Bar
+            // 3. View Mode Toolbar & Timeline Scrubber
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(CncPanelBackground, RoundedCornerShape(6.dp))
                     .border(1.dp, CncBorder, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // View Mode Selectors
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     listOf(
                         ViewMode.TOP_XY to "XY",
                         ViewMode.FRONT_XZ to "XZ",
@@ -127,58 +127,52 @@ fun TwinScreenConsoleView(
                         ViewMode.MATERIAL_25D to "MAT",
                         ViewMode.ISOMETRIC to "ISO",
                         ViewMode.ORBIT_3D to "3D",
-                        ViewMode.SECTION_CUT to "SNIJD"
+                        ViewMode.SECTION_CUT to "SNEDE"
                     ).forEach { (mode, label) ->
                         val isSelected = uiState.viewMode == mode
-                        Button(
-                            onClick = { onViewModeChange(mode) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) CncAccentOrange else CncSurfaceDark
-                            ),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            shape = RoundedCornerShape(3.dp),
-                            modifier = Modifier
-                                .height(24.dp)
-                                .defaultMinSize(minWidth = 26.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 9.sp,
-                                color = if (isSelected) CncDarkBackground else CncTextSecondary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        CncKeyCap(
+                            label = label,
+                            containerColor = if (isSelected) CncAccentOrange else CncSurfaceDark,
+                            textColor = if (isSelected) CncDarkBackground else CncTextSecondary,
+                            borderColor = if (isSelected) CncAccentOrange else CncBorder,
+                            height = 24.dp,
+                            fontSize = 9.sp,
+                            cornerRadius = 3.dp,
+                            modifier = Modifier.widthIn(min = 32.dp),
+                            onClick = { onViewModeChange(mode) }
+                        )
                     }
                 }
 
-                Text(
-                    text = "Regel ${uiState.machineState.activeLineNumber} | Stap ${uiState.machineState.currentStepIndex}/${uiState.segments.size}",
-                    fontSize = 10.sp,
-                    color = CncDroGreen,
-                    fontWeight = FontWeight.Bold
+                CncTimelineScrubber(
+                    currentStep = uiState.machineState.currentStepIndex,
+                    totalSteps = uiState.segments.size,
+                    onSeek = onSeek,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-            // 4. Authentic Bottom Softkeys Row
+            // 4. Authentic Bottom Softkeys Row (Zero-overlap CncSoftkey)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.casingBackground, RoundedCornerShape(6.dp))
                     .border(1.dp, colors.casingBorder, RoundedCornerShape(6.dp))
                     .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                TwinSoftkey("KOPIEER", colors, Modifier.weight(1f)) { onCopyLine() }
-                TwinSoftkey("PLAK", colors, Modifier.weight(1f)) { onPasteLine() }
-                TwinSoftkey("DEL", colors, Modifier.weight(0.9f)) { onDeleteLine() }
-                TwinSoftkey("TOOLS", colors, Modifier.weight(1f)) { onOpenToolTable() }
-                TwinSoftkey("CALC", colors, Modifier.weight(0.9f)) { onOpenCalculator() }
-                TwinSoftkey("Q-PAR", colors, Modifier.weight(1f)) { onOpenQParams() }
-                TwinSoftkey("DXF/ISO", colors, Modifier.weight(1.1f)) { onOpenImportExport() }
-                TwinSoftkey(
-                    if (uiState.diagnostics.isNotEmpty()) "FOUTEN (${uiState.diagnostics.size})" else "STATUS",
-                    colors,
-                    Modifier.weight(1.2f),
+                CncSoftkey("KOPIËER", colors, Modifier.weight(1f), height = 26.dp) { onCopyLine() }
+                CncSoftkey("PLAK", colors, Modifier.weight(1f), height = 26.dp) { onPasteLine() }
+                CncSoftkey("DEL", colors, Modifier.weight(0.9f), height = 26.dp) { onDeleteLine() }
+                CncSoftkey("TOOLS", colors, Modifier.weight(1f), height = 26.dp) { onOpenToolTable() }
+                CncSoftkey("CALC", colors, Modifier.weight(0.9f), height = 26.dp) { onOpenCalculator() }
+                CncSoftkey("Q-PAR", colors, Modifier.weight(1f), height = 26.dp) { onOpenQParams() }
+                CncSoftkey("DXF/ISO", colors, Modifier.weight(1.1f), height = 26.dp) { onOpenImportExport() }
+                CncSoftkey(
+                    label = if (uiState.diagnostics.isNotEmpty()) "FOUTEN (${uiState.diagnostics.size})" else "STATUS",
+                    colors = colors,
+                    modifier = Modifier.weight(1.2f),
+                    height = 26.dp,
                     isAlert = uiState.diagnostics.isNotEmpty()
                 ) { onOpenDiagnostics() }
             }
@@ -209,35 +203,6 @@ fun TwinScreenConsoleView(
             modifier = Modifier
                 .weight(1.0f)
                 .fillMaxHeight()
-        )
-    }
-}
-
-@Composable
-private fun TwinSoftkey(
-    text: String,
-    colors: ConsoleColors,
-    modifier: Modifier = Modifier,
-    isAlert: Boolean = false,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isAlert) CncRapidOrange else colors.softkeyBackground
-        ),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 1.dp),
-        shape = RoundedCornerShape(3.dp),
-        modifier = modifier
-            .height(26.dp)
-            .border(0.8.dp, if (isAlert) CncRapidOrange else colors.softkeyBorder, RoundedCornerShape(3.dp))
-    ) {
-        Text(
-            text = text,
-            fontSize = 9.sp,
-            color = if (isAlert) Color.White else colors.softkeyText,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
         )
     }
 }

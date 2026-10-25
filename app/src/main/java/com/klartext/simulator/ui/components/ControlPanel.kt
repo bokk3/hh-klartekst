@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.klartext.simulator.model.ViewMode
+import com.klartext.simulator.ui.designsystem.CncKeyCap
+import com.klartext.simulator.ui.designsystem.CncTimelineScrubber
+import com.klartext.simulator.ui.designsystem.ViewModeChipStrip
 import com.klartext.simulator.ui.theme.*
 
 @Composable
@@ -41,93 +45,93 @@ fun ControlPanel(
         modifier = modifier
             .background(CncPanelBackground, RoundedCornerShape(8.dp))
             .border(1.dp, CncBorder, RoundedCornerShape(8.dp))
-            .padding(6.dp)
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Scrub Slider
+        // Custom Timeline Scrubber (no vertical bar glitch)
+        CncTimelineScrubber(
+            currentStep = currentStep,
+            totalSteps = totalSteps,
+            onSeek = onSeek
+        )
+
+        // Adaptive View Mode Strip
+        ViewModeChipStrip(
+            activeMode = viewMode,
+            onViewModeChange = onViewModeChange
+        )
+
+        // Playback Controls Row
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "${currentStep.coerceAtLeast(0)} / $totalSteps",
+            CncKeyCap(
+                label = "",
+                icon = Icons.Default.Replay,
+                containerColor = CncSurfaceDark,
+                textColor = CncTextPrimary,
+                borderColor = CncBorder,
+                height = 30.dp,
+                modifier = Modifier.weight(0.8f),
+                onClick = onReset
+            )
+            CncKeyCap(
+                label = "",
+                icon = Icons.Default.SkipPrevious,
+                containerColor = CncSurfaceDark,
+                textColor = CncTextPrimary,
+                borderColor = CncBorder,
+                height = 30.dp,
+                enabled = currentStep > 0,
+                modifier = Modifier.weight(0.8f),
+                onClick = onStepBack
+            )
+            CncKeyCap(
+                label = if (isPlaying) "PAUZE" else "START",
+                icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                containerColor = CncAccentOrange,
+                textColor = CncDarkBackground,
+                height = 30.dp,
                 fontSize = 10.sp,
-                color = CncTextSecondary,
-                modifier = Modifier.width(55.dp)
+                modifier = Modifier.weight(1.4f),
+                onClick = onPlayPause
             )
-            Slider(
-                value = currentStep.toFloat(),
-                onValueChange = { onSeek(it.toInt()) },
-                valueRange = 0f..totalSteps.coerceAtLeast(1).toFloat(),
-                modifier = Modifier.weight(1f),
-                colors = SliderDefaults.colors(
-                    thumbColor = CncAccentOrange,
-                    activeTrackColor = CncAccentOrange,
-                    inactiveTrackColor = CncBorder
-                )
+            CncKeyCap(
+                label = "",
+                icon = Icons.Default.SkipNext,
+                containerColor = CncSurfaceDark,
+                textColor = CncTextPrimary,
+                borderColor = CncBorder,
+                height = 30.dp,
+                enabled = currentStep < totalSteps,
+                modifier = Modifier.weight(0.8f),
+                onClick = onStepForward
             )
-        }
+            CncKeyCap(
+                label = "S-BLK",
+                containerColor = if (isSingleBlockActive) Color(0xFFE65100) else CncSurfaceDark,
+                textColor = if (isSingleBlockActive) Color.White else CncTextSecondary,
+                borderColor = CncBorder,
+                height = 30.dp,
+                fontSize = 9.5.sp,
+                modifier = Modifier.weight(1.0f),
+                onClick = onToggleSingleBlock
+            )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Playback buttons
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onReset, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Replay, contentDescription = "Reset", tint = CncTextPrimary, modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onStepBack, enabled = currentStep > 0, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Stap Terug", tint = CncTextPrimary, modifier = Modifier.size(18.dp))
-                }
-                IconButton(
-                    onClick = onPlayPause,
-                    colors = IconButtonDefaults.iconButtonColors(containerColor = CncAccentOrange),
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pauze" else "Start",
-                        tint = CncDarkBackground,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                IconButton(onClick = onStepForward, enabled = currentStep < totalSteps, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Stap Vooruit", tint = CncTextPrimary, modifier = Modifier.size(18.dp))
-                }
-                Button(
-                    onClick = onToggleSingleBlock,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSingleBlockActive) Color(0xFFE65100) else CncSurfaceDark
-                    ),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Text(
-                        text = "S-BLK",
-                        fontSize = 9.sp,
-                        color = if (isSingleBlockActive) Color.White else CncTextSecondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // Speed multiplier selector
             var speedExpanded by remember { mutableStateOf(false) }
-            Box {
-                Button(
-                    onClick = { speedExpanded = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = CncSurfaceDark),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Text(text = "${playbackSpeed}x", fontSize = 11.sp, color = CncTextPrimary)
-                }
+            Box(modifier = Modifier.weight(0.9f)) {
+                CncKeyCap(
+                    label = "${playbackSpeed}x",
+                    containerColor = CncSurfaceDark,
+                    textColor = CncAccentOrange,
+                    borderColor = CncBorder,
+                    height = 30.dp,
+                    fontSize = 10.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { speedExpanded = true }
+                )
                 DropdownMenu(
                     expanded = speedExpanded,
                     onDismissRequest = { speedExpanded = false },
@@ -140,37 +144,6 @@ fun ControlPanel(
                                 onSpeedChange(spd)
                                 speedExpanded = false
                             }
-                        )
-                    }
-                }
-            }
-
-            // View mode toggles: XY, XZ, YZ, MAT (2.5D Material), ISO, 3D (Orbit), SNIJD (Section)
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                listOf(
-                    ViewMode.TOP_XY to "XY",
-                    ViewMode.FRONT_XZ to "XZ",
-                    ViewMode.SIDE_YZ to "YZ",
-                    ViewMode.MATERIAL_25D to "MAT",
-                    ViewMode.ISOMETRIC to "ISO",
-                    ViewMode.ORBIT_3D to "3D",
-                    ViewMode.SECTION_CUT to "SNIJD"
-                ).forEach { (mode, label) ->
-                    val isSelected = viewMode == mode
-                    Button(
-                        onClick = { onViewModeChange(mode) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isSelected) CncAccentOrange else CncSurfaceDark
-                        ),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 28.dp, minHeight = 28.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            fontSize = 10.sp,
-                            color = if (isSelected) CncDarkBackground else CncTextSecondary,
-                            fontWeight = FontWeight.Bold
                         )
                     }
                 }

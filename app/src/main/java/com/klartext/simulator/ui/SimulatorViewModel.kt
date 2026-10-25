@@ -246,6 +246,18 @@ class SimulatorViewModel : ViewModel() {
         }
     }
 
+    fun setMobileTab(tab: MobileWorkspaceTab) {
+        _uiState.update { it.copy(activeMobileTab = tab) }
+    }
+
+    fun togglePortraitKeypad() {
+        _uiState.update { it.copy(isPortraitKeypadExpanded = !it.isPortraitKeypadExpanded) }
+    }
+
+    fun setPortraitKeypadExpanded(expanded: Boolean) {
+        _uiState.update { it.copy(isPortraitKeypadExpanded = expanded) }
+    }
+
     fun ncStart() {
         if (_uiState.value.isSingleBlockActive) {
             stepForward()
@@ -427,6 +439,8 @@ class SimulatorViewModel : ViewModel() {
 
         _uiState.update {
             it.copy(
+                activeMobileTab = MobileWorkspaceTab.PROGRAMMING,
+                isPortraitKeypadExpanded = true,
                 activeDialog = ActiveDialogSession(
                     commandTitle = cmd,
                     baseCommand = cmd,

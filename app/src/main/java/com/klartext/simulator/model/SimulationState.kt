@@ -78,6 +78,12 @@ enum class ConsoleTheme {
     HYPERMODERN      // Dark Slate / Cyber CNC (ultra-modern dark mode)
 }
 
+enum class MobileWorkspaceTab(val label: String) {
+    SIMULATION("3D SIM & UITVOER"),
+    PROGRAMMING("PROGRAMMEREN"),
+    TOOLS("TOOLS & TABELLEN")
+}
+
 data class SimulationUiState(
     val programName: String = "CONTOURFREZEN_V4.H",
     val rawCode: String = "",
@@ -114,5 +120,7 @@ data class SimulationUiState(
     val isConsoleTwinScreen: Boolean? = null,
     val isSingleBlockActive: Boolean = false,
     val machinePreset: MachinePreset = MachinePreset.DMU_50,
-    val consoleTheme: ConsoleTheme = ConsoleTheme.CLASSIC_TNC640
+    val consoleTheme: ConsoleTheme = ConsoleTheme.CLASSIC_TNC640,
+    val activeMobileTab: MobileWorkspaceTab = MobileWorkspaceTab.SIMULATION,
+    val isPortraitKeypadExpanded: Boolean = true
 )

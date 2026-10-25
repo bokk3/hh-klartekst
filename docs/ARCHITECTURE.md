@@ -192,10 +192,28 @@ Als $Z_{cut} < Z_{huidig}(col, row)$, wordt de nieuwe diepte vastgelegd.
 
 ---
 
-## 7. TE 640 Console & Dual UI Theming
+## 7. TE 640 Console, Custom CNC Design System & Android 17 Adaptive Workspaces
 
-De applicatie ondersteunt twee visuele consoles, configureerbaar via `ConsoleThemeColors.kt`:
+### 7.1 Custom CNC Design System (`ui/designsystem/`)
+Standaard Material 3 `Button`-componenten dwingen een minimale aanraakgrootte van `48.dp × 48.dp` (`LocalMinimumInteractiveComponentSize`) af, wat bij compacte industriële toetsenpanelen tot overlappende randen leidt. Daarom beschikt de simulator over een eigen CNC Design System:
+- **`CncKeyCap` & `CncSoftkey`**: Schakelt `LocalMinimumInteractiveComponentSize` uit en rendert pixel-accurate 3D-keycaps op elke hoogte (`20.dp` t/m `48.dp`) zonder verticale of horizontale overflow.
+- **`CncTimelineScrubber`**: Maatwerk horizontale tijdlijn-scrubber met cirkelvormige playhead en directe tap/drag-seeking (vervangt de hoge verticale Material 3 slider-thumb).
+- **`FloatingSimHud` (`CompactDroBar`, `ViewModeChipStrip`, `LiveActiveCodeBanner`)**: Compacte HUD-elementen die maximale ruimte laten voor het 3D-canvas en nooit buiten beeld worden afgesneden.
 
+### 7.2 Android 17 (2027) Edge-to-Edge & Adaptive Workspaces (`ui/workspaces/`)
+De applicatie ondersteunt volledige `WindowInsets.safeDrawing` Edge-to-Edge weergave en past zijn indeling aan op het apparaat:
+1. **Tablet / Groot Scherm (`TwinScreenConsoleView`)**: Gesplitste weergave met links het TNC-beeldscherm (DRO + 3D Sim + Code + Softkeys) en rechts het volledige HEIDENHAIN TE 640 bedieningspaneel.
+2. **Mobiele Telefoon Workspaces**:
+   - **Tab 1: `MobileSimulationWorkspace` (3D Sim & Uitvoer)**:
+     - *Portret*: Groot 3D/2D canvas + `CompactDroBar` + scrollbare `ViewModeChipStrip` + `LiveActiveCodeBanner` + `NC START / STOP / SINGLE / OVERRIDES` onderin.
+     - *Landschap*: Links 65% 3D/2D canvas, rechts 35% dedicated Machine Uitvoer- en Override-paneel met draaiknoppen.
+   - **Tab 2: `MobileProgrammingWorkspace` (Code & Knoppen)**:
+     - *Landschap*: Links 52% Klartext Code Editor, rechts 48% volledig TNC 640 Programmeer- & Dialoogtoetsenbord.
+     - *Portret*: Boven de Klartext Code Editor, onder het in-/uitklapbare TNC 640 CNC-toetsenbord.
+   - **Tab 3: `MobileToolsWorkspace` (Werkplaats & Tabellen)**:
+     - Dashboard met directe toegang tot Gereedschapstabel (`TOOL.T`), Verspaningscalculator, Q-Parameters, DXF/ISO Converter, Diagnostiek en Opleidingscurriculum.
+
+### 7.3 Twee Visuele Console Thema's (`ConsoleThemeColors.kt`)
 1. **CLASSIC_TNC640 (Industrieel HEIDENHAIN TE 640)**:
    - Kastkleur in authentiek machinegrijs (RAL 7035: `#C7CED6`).
    - Ivoorwitte numerieke toetsen (`#F8FAFC`) met donkere opschriften.

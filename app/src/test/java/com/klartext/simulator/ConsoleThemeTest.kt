@@ -2,6 +2,7 @@ package com.klartext.simulator
 
 import androidx.compose.ui.graphics.Color
 import com.klartext.simulator.model.ConsoleTheme
+import com.klartext.simulator.model.MobileWorkspaceTab
 import com.klartext.simulator.model.SimulationUiState
 import com.klartext.simulator.ui.theme.ClassicTnc640ConsoleColors
 import com.klartext.simulator.ui.theme.HypermodernConsoleColors
@@ -59,5 +60,12 @@ class ConsoleThemeTest {
 
         // Dial faceplate is dark slate
         assertEquals(Color(0xFF1B2228), colors.dialCardBackground)
+    }
+
+    @Test
+    fun testDefaultMobileWorkspaceIsSimulationAndKeypadReady() {
+        val state = SimulationUiState()
+        assertEquals(MobileWorkspaceTab.SIMULATION, state.activeMobileTab)
+        assertTrue(state.isPortraitKeypadExpanded)
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.klartext.simulator.ui.designsystem.CncKeyCap
 import com.klartext.simulator.ui.theme.*
 import kotlin.math.*
 
@@ -227,22 +228,15 @@ private fun SmallPillButton(
     val pillBg = if (isHighlight) Color(0xFF1B5E20) else (colors?.dialPillBackground ?: Color(0xFF263238))
     val pillTxt = if (isHighlight) CncDroGreen else (colors?.dialPillText ?: CncTextPrimary)
 
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = pillBg
-        ),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-        shape = RoundedCornerShape(3.dp),
-        modifier = Modifier
-            .height(20.dp)
-            .defaultMinSize(minWidth = 24.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = pillTxt
-        )
-    }
+    CncKeyCap(
+        label = text,
+        containerColor = pillBg,
+        textColor = pillTxt,
+        borderColor = colors?.dialCardBorder,
+        height = 20.dp,
+        fontSize = 8.5.sp,
+        cornerRadius = 3.dp,
+        modifier = Modifier.width(34.dp),
+        onClick = onClick
+    )
 }

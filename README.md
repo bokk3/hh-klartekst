@@ -61,9 +61,13 @@ Om ongewenst zwabberen over meerdere assen tijdens veegbewegingen op touchscreen
   - Geborsteld aluminium draaiknoppen voor Feed- en Spindle-override ($0\% - 150\%$).
 - **Thema 2: HYPERMODERN**:
   - Donkere carbon- en leisteentinten met cyaan- en neon-oranje verlichting voor nachtelijke programmeersessies.
-- **Responsieve Schermindelingen**:
-  - **TwinScreen Console View**: Split-screen weergave voor tablets en desktop tablets (grafisch scherm + fysiek bedieningspaneel zij aan zij).
-  - **Phone Landscape View**: Geoptimaliseerde breedbeeldweergave voor smartphones met zwevende softkeys en minimale interfacebelasting.
+- **Android 17 (2027) Adaptive UI & Ergonomische Mobiele Workspaces**:
+  - **Custom CNC Design System (`CncKeyCap`, `CncSoftkey`, `CncTimelineScrubber`)**: Bypast de Material 3 `48.dp` minimum touch-target border bug zodat industriële toetsrijen, numpads en softkeys nooit overlappen.
+  - **TwinScreen Console View (Tablets & Grote Schermen)**: Gesplitste weergave met links het TNC-beeldscherm (DRO + 3D Sim + Code + Softkeys) en rechts het volledige HEIDENHAIN TE 640 bedieningspaneel.
+  - **Doelgerichte Mobiele Workspace-Tabs (Smartphones)**:
+    1. **Tab 1 — `3D SIM & UITVOER`**: Volledig scherm voor 3D/2D simulatie met zwevende mini-DRO, scrollbare weergave-chips, live coderegel-ticker en een dedicated Machine Uitvoer- en Override-paneel (`NC START`, `NC STOP`, `SINGLE`, `STAP`, Feed/Spindle Overrides).
+    2. **Tab 2 — `PROGRAMMEREN (CODE + KNOPPEN)`**: In landschap **Code links en het TNC 640 toetsenbord rechts**; in portret **Code boven en een in-/uitklapbaar CNC-toetsenbord onder**.
+    3. **Tab 3 — `TOOLS & PGM`**: Ruim werkplaats-dashboard voor Gereedschapstabel, Calculator, Q-Parameters, DXF/ISO Converter, Diagnostiek en alle Opleidingsprogramma's.
 
 ### 5. Geïntegreerd Opleidingscurriculum
 Direct selecteerbaar via de programmakiezer:
